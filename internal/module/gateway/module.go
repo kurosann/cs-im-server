@@ -59,23 +59,17 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	customerAPI := api.NewCustomerAPI(m.customers)
 	conversationAPI := api.NewConversationAPI(m.conversations)
 	messageAPI := api.NewMessageAPI(m.messages)
-	realtimeAPI := api.NewRealtimeAPI(m.realtime)
 
-	apiGroup := commonmodule.NewHttpRouteGroup("/api/v1").Compose(
-		appAPI.RuntimeRoutes(),
-		customerAPI.Routes(),
-		conversationAPI.Routes(),
-		messageAPI.Routes(),
-		messageAPI.ConversationRoutes(),
-	)
 	adminGroup := commonmodule.NewHttpRouteGroup("/admin/v1").Compose(
 		appAPI.AdminRoutes(),
+		customerAPI.AdminRoutes(),
 		conversationAPI.AdminRoutes(),
+		messageAPI.AdminRoutes(),
+		messageAPI.AdminConversationRoutes(),
 	)
-	realtimeGroup := commonmodule.NewHttpRouteGroup("/ws/v1").Compose(realtimeAPI.Routes())
 
 	return commonmodule.HttpApiInfo{
-		Handlers:    commonmodule.MergeHandlers(apiGroup.Handlers(), adminGroup.Handlers(), realtimeGroup.Handlers()),
+		Handlers:    adminGroup.Handlers(),
 		Middlewares: []commonmodule.HttpMiddleware{iampkg.AccountTokenMiddleware()},
 	}
 }

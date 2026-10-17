@@ -38,11 +38,9 @@ func (m *Module) Task() []commonmodule.TaskRegInfo { return nil }
 
 func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	channelHTTP := http.NewChannelGatewayHTTPAPI(
-		iampkg.Service(),
 		gatewaypkg.GetApp(),
 		gatewaypkg.GetConversation(),
 		gatewaypkg.GetMessage(),
-		gatewaypkg.GetRealtime(),
 	)
 	routes := commonmodule.NewHttpRouteGroup("/api/v1").Compose(channelHTTP.Routes())
 	return commonmodule.HttpApiInfo{

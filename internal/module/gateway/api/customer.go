@@ -67,7 +67,7 @@ func (a *CustomerAPI) Merge(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", customer)
 }
 
-func (a *CustomerAPI) Routes() commonmodule.HttpRouteGroup {
+func (a *CustomerAPI) AdminRoutes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/customers")
 	routes.Post("", a.Create)
 	routes.Get("/:id", a.Get)

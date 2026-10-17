@@ -54,10 +54,12 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	channels := relayhttp.NewChannelAPI(relaypkg.Service())
 	webhooks := relayhttp.NewWebhookAPI(relaypkg.Service())
 	ai := relayhttp.NewAIAPI(relaypkg.Service())
+	realtime := relayhttp.NewRealtimeAPI(gatewaypkg.GetApp(), gatewaypkg.GetMessage(), gatewaypkg.GetRealtime())
 	admin := commonmodule.NewHttpRouteGroup("/admin/v1").
 		Compose(channels.Routes(), webhooks.Routes(), ai.Routes())
+	channelEvents := commonmodule.NewHttpRouteGroup("/api/v1").Compose(realtime.Routes())
 	return commonmodule.HttpApiInfo{
-		Handlers:    admin.Handlers(),
+		Handlers:    commonmodule.MergeHandlers(admin.Handlers(), channelEvents.Handlers()),
 		Middlewares: []commonmodule.HttpMiddleware{iampkg.AccountTokenMiddleware()},
 	}
 }

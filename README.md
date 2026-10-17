@@ -56,7 +56,7 @@ curl -H "Authorization: Bearer dev-access-token" \
 curl -H "Authorization: Bearer dev-access-token" \
   -H "Content-Type: application/json" \
   -d '{"name":"web-portal","type":"web"}' \
-  http://127.0.0.1:8080/api/v1/apps/register
+  http://127.0.0.1:8080/admin/v1/apps/register
 ```
 
 ## 当前边界

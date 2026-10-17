@@ -103,18 +103,13 @@ func (a *AppAPI) Messages(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", page)
 }
 
-func (a *AppAPI) RuntimeRoutes() commonmodule.HttpRouteGroup {
+func (a *AppAPI) AdminRoutes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/apps")
 	routes.Post("/register", a.Register)
 	routes.Post("/heartbeat", a.Heartbeat)
-	routes.Get("/:id/conversations/:conversationId/messages", a.Messages)
-	return routes
-}
-
-func (a *AppAPI) AdminRoutes() commonmodule.HttpRouteGroup {
-	routes := commonmodule.NewHttpRouteGroup("/apps")
 	routes.Get("", a.List)
 	routes.Get("/:id", a.Get)
+	routes.Get("/:id/conversations/:conversationId/messages", a.Messages)
 	routes.Post("/:id/enable", a.Enable)
 	routes.Post("/:id/disable", a.Disable)
 	return routes

@@ -7,25 +7,20 @@ import (
 	iampkg "cs-im-server/internal/module/iam/pkg"
 	"cs-im-server/pkg/httpapi"
 	"cs-im-server/pkg/seqquery"
-	"cs-im-server/pkg/sse"
 	commonmodule "vane-common/module"
 )
 
 type ChannelGatewayHTTPAPI struct {
-	Accounts      *iampkg.AccountService
 	Apps          *gatewaypkg.AppService
 	Conversations *gatewaypkg.ConversationService
 	MessageSvc    *gatewaypkg.MessageService
-	Realtime      *gatewaypkg.RealtimeService
 }
 
-func NewChannelGatewayHTTPAPI(accountService *iampkg.AccountService, appService *gatewaypkg.AppService, conversationService *gatewaypkg.ConversationService, messageService *gatewaypkg.MessageService, realtimeService *gatewaypkg.RealtimeService) *ChannelGatewayHTTPAPI {
+func NewChannelGatewayHTTPAPI(appService *gatewaypkg.AppService, conversationService *gatewaypkg.ConversationService, messageService *gatewaypkg.MessageService) *ChannelGatewayHTTPAPI {
 	return &ChannelGatewayHTTPAPI{
-		Accounts:      accountService,
 		Apps:          appService,
 		Conversations: conversationService,
 		MessageSvc:    messageService,
-		Realtime:      realtimeService,
 	}
 }
 
@@ -81,6 +76,19 @@ func (a *ChannelGatewayHTTPAPI) EnsureConversation(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", map[string]any{"conversation": conversation, "created": created})
 }
 
+func (a *ChannelGatewayHTTPAPI) GetConversation(ctx httpapi.Context) {
+	if err := authorizeChannel(ctx, ctx.Param("id"), a.Apps); err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	conversation, err := a.Conversations.Get(ctx.Context(), ctx.Param("conversationId"))
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", conversation)
+}
+
 func (a *ChannelGatewayHTTPAPI) Messages(ctx httpapi.Context) {
 	if err := authorizeChannel(ctx, ctx.Param("id"), a.Apps); err != nil {
 		writeServiceError(ctx, err)
@@ -99,41 +107,11 @@ func (a *ChannelGatewayHTTPAPI) Messages(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", page)
 }
 
-func (a *ChannelGatewayHTTPAPI) Stream(ctx httpapi.Context) {
-	if err := authorizeChannel(ctx, ctx.Param("id"), a.Apps); err != nil {
-		writeServiceError(ctx, err)
-		return
-	}
-	events, closeFn, err := a.Realtime.Subscribe(ctx.Context())
-	if err != nil {
-		writeServiceError(ctx, err)
-		return
-	}
-	defer closeFn()
-	sse.WriteHeaders(ctx)
-	for {
-		select {
-		case <-ctx.Context().Done():
-			return
-		case event, ok := <-events:
-			if !ok {
-				return
-			}
-			if !a.MessageSvc.ChannelEventAllowed(ctx.Param("id"), event) {
-				continue
-			}
-			if err := sse.WriteEvent(ctx, event); err != nil {
-				return
-			}
-		}
-	}
-}
-
 func (a *ChannelGatewayHTTPAPI) Routes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/channels")
 	routes.Post("/:id/conversations/ensure", a.EnsureConversation)
+	routes.Get("/:id/conversations/:conversationId", a.GetConversation)
 	routes.Post("/:id/messages", a.SendMessage)
 	routes.Get("/:id/conversations/:conversationId/messages", a.Messages)
-	routes.Get("/:id/realtime", a.Stream)
 	return routes
 }

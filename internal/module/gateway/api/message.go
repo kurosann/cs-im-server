@@ -68,7 +68,7 @@ func (a *MessageAPI) History(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", page)
 }
 
-func (a *MessageAPI) Routes() commonmodule.HttpRouteGroup {
+func (a *MessageAPI) AdminRoutes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/messages")
 	routes.Post("", a.Create)
 	routes.Get("/:id", a.Get)
@@ -76,7 +76,7 @@ func (a *MessageAPI) Routes() commonmodule.HttpRouteGroup {
 	return routes
 }
 
-func (a *MessageAPI) ConversationRoutes() commonmodule.HttpRouteGroup {
+func (a *MessageAPI) AdminConversationRoutes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/conversations")
 	routes.Get("/:id/messages", a.ConversationMessages)
 	routes.Get("/:id/messages/:conversationId", a.History)

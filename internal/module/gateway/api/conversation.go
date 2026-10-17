@@ -91,18 +91,13 @@ func (a *ConversationAPI) Deliveries(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", deliveries)
 }
 
-func (a *ConversationAPI) Routes() commonmodule.HttpRouteGroup {
+func (a *ConversationAPI) AdminRoutes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/conversations")
 	routes.Post("", a.Create)
 	routes.Get("", a.List)
 	routes.Get("/:id", a.Get)
 	routes.Post("/:id/assign", a.Assign)
 	routes.Post("/:id/close", a.Close)
-	return routes
-}
-
-func (a *ConversationAPI) AdminRoutes() commonmodule.HttpRouteGroup {
-	routes := commonmodule.NewHttpRouteGroup("/conversations")
 	routes.Post("/:id/forward", a.Forward)
 	routes.Get("/:id/deliveries", a.Deliveries)
 	return routes
