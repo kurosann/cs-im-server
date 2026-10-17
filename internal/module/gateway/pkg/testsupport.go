@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 
+	gatewayruntime "cs-im-server/internal/module/gateway/internal/runtime"
 	"cs-im-server/internal/module/gateway/internal/service"
 	iampkg "cs-im-server/internal/module/iam/pkg"
 )
@@ -36,6 +37,6 @@ func NewTestGatewayServices() GatewayTestServices {
 		Apps: apps, Conversations: conversations,
 		Messages: messages, Realtime: realtime,
 	}
-	SetCapabilities(apps, conversations, messages, realtime, realtime)
+	gatewayruntime.SetCapabilities(apps, conversations, messages, realtime, realtime)
 	return services
 }

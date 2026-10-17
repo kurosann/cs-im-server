@@ -5,8 +5,8 @@ import (
 
 	"cs-im-server/internal/module/gateway/internal/api"
 	"cs-im-server/internal/module/gateway/internal/model"
+	gatewayruntime "cs-im-server/internal/module/gateway/internal/runtime"
 	"cs-im-server/internal/module/gateway/internal/service"
-	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
 	iampkg "cs-im-server/internal/module/iam/pkg"
 
 	commonmodule "vane-common/module"
@@ -31,7 +31,7 @@ func (m *Module) Init(_ context.Context) error {
 	m.conversations = service.NewConversationService(m.apps, m.customers, nil, m.realtime)
 	m.messages = service.NewMessageService(m.apps, m.conversations, m.realtime)
 	m.conversations.SetMessages(service.NewConversationMessageStore(m.messages))
-	gatewaypkg.SetCapabilities(m.apps, m.conversations, m.messages, m.realtime, m.realtime)
+	gatewayruntime.SetCapabilities(m.apps, m.conversations, m.messages, m.realtime, m.realtime)
 
 	for _, loaded := range []interface{ Load() error }{m.apps, m.customers, m.conversations, m.messages} {
 		if err := loaded.Load(); err != nil {
