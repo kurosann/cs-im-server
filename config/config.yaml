@@ -1,7 +1,7 @@
 server:
   host: "127.0.0.1"
-  port: 8080
-  disable_grpc: true
+  port: 19091
+  disable_grpc: false
   standalone: true
   telemetry:
     port: 0
@@ -26,5 +26,8 @@ log:
   console_encode: true
 
 access:
-  access_token: "dev-access-token"
+  account_token: "dev-access-token"
   tenant_id: "dev-tenant"
+
+database:
+  dsn: ""

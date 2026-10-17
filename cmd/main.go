@@ -2,6 +2,7 @@ package main
 
 import (
 	"vane-common/cmd"
+	"vane-common/dbserver"
 	"vane-common/httpserver"
 	"vane-common/pkg/logger"
 	"vane-common/server"
@@ -12,12 +13,14 @@ import (
 )
 
 func main() {
+	_ = cfg.Init("")
 	modules := appmodule.Modules()
 	cmd.NewServerCmd(
 		server.NewServer(cfg.ServiceRoleName).
 			WithConfig(cfg.GetServerConfig).
 			RegModule(modules).
 			RegExtendServer(
+				dbserver.EnableDBServer(cfg.GetDbConfig),
 				httpserver.EnableHTTPServer(cfg.GetHTTPConfig, modules, httpserver.WithRoutePrefix("")),
 			),
 	).WithInit(func(configPath string) error {

@@ -36,19 +36,9 @@ func (m *SystemModule) HttpApi() commonmodule.HttpApiInfo {
 	return commonmodule.HttpApiInfo{
 		Prefix: "",
 		Handlers: []commonmodule.HttpHandlerRegInfo{
-			commonmodule.NewGetReqHttpRegInfo("/healthz", m.health),
-			commonmodule.NewGetReqHttpRegInfo("/readyz", m.ready),
 			commonmodule.NewGetReqHttpRegInfo("/api/v1/version", m.version),
 		},
 	}
-}
-
-func (m *SystemModule) health(ctx commonmodule.HttpReqContext) {
-	ctx.JSON(200, map[string]any{"code": "OK", "data": map[string]string{"status": "ok"}})
-}
-
-func (m *SystemModule) ready(ctx commonmodule.HttpReqContext) {
-	ctx.JSON(200, map[string]any{"code": "OK", "data": map[string]string{"status": "ready"}})
 }
 
 func (m *SystemModule) version(ctx commonmodule.HttpReqContext) {

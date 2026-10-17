@@ -12,8 +12,12 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"cs-im-server/pkg/consts"
+	"vane-common/dbserver"
 	"vane-common/httpserver"
+	"vane-common/pkg/dataaccess/model"
+	"vane-common/pkg/dataaccess/store"
 	"vane-common/pkg/logger"
+	"vane-common/pkg/mysqldb"
 	"vane-common/server/pkg/role"
 	"vane-common/server/serverconfig"
 	"vane-common/telemetry"
@@ -22,10 +26,11 @@ import (
 const ServiceRoleName = role.ServiceRole(consts.ServiceName)
 
 type ConfigRoot struct {
-	Server ServerConfig       `yaml:"server"`
-	Log    logger.LogConfig   `yaml:"log"`
-	Access AccessConfig       `yaml:"access"`
-	HTTP   HTTPListenerConfig `yaml:"http"`
+	Server   ServerConfig       `yaml:"server"`
+	Log      logger.LogConfig   `yaml:"log"`
+	Access   AccessConfig       `yaml:"access"`
+	HTTP     HTTPListenerConfig `yaml:"http"`
+	Database DatabaseConfig     `yaml:"database"`
 }
 
 type ServerConfig struct {
@@ -53,8 +58,8 @@ type PushGatewayConfig struct {
 }
 
 type AccessConfig struct {
-	AccessToken string `yaml:"access_token"`
-	TenantID    string `yaml:"tenant_id"`
+	AccountToken string `yaml:"account_token"`
+	TenantID     string `yaml:"tenant_id"`
 }
 
 type HTTPListenerConfig struct {
@@ -62,7 +67,26 @@ type HTTPListenerConfig struct {
 	Port int    `yaml:"port"`
 }
 
+type DatabaseConfig struct {
+	DSN string `yaml:"dsn"`
+}
+
 var appConfig *ConfigRoot
+
+func GetDbConfig() dbserver.Db {
+	dbRelation := make(map[model.DbSource]store.RelationStore)
+	if appConfig != nil && appConfig.Database.DSN != "" {
+		mysqlDB, err := mysqldb.NewMysqlDB(mysqldb.Config{DSN: appConfig.Database.DSN})
+		if err != nil {
+			panic(fmt.Sprintf("[cfg] init mysql db failed: %v\nDSN=%q", err, appConfig.Database.DSN))
+		}
+		dbRelation["main"] = store.RelationStore{DB: mysqlDB}
+	}
+	return dbserver.Db{
+		DbRelation: dbRelation,
+		DbStore:    make(map[model.DbSource]store.IKVStore),
+	}
+}
 
 func GetConfig() *ConfigRoot {
 	return appConfig
@@ -109,8 +133,8 @@ func defaultConfig() *ConfigRoot {
 			ConsoleEncode: true,
 		},
 		Access: AccessConfig{
-			AccessToken: "dev-access-token",
-			TenantID:    "dev-tenant",
+			AccountToken: "dev-access-token",
+			TenantID:     "dev-tenant",
 		},
 		HTTP: HTTPListenerConfig{
 			Host: consts.DefaultServerHost,
@@ -132,8 +156,8 @@ func applyDefaults(cfg *ConfigRoot) {
 	if cfg.HTTP.Port == 0 {
 		cfg.HTTP.Port = cfg.Server.Port
 	}
-	if cfg.Access.AccessToken == "" {
-		cfg.Access.AccessToken = "dev-access-token"
+	if cfg.Access.AccountToken == "" {
+		cfg.Access.AccountToken = "dev-access-token"
 	}
 	if cfg.Access.TenantID == "" {
 		cfg.Access.TenantID = "dev-tenant"
@@ -153,15 +177,25 @@ func injectEnv() {
 		if err != nil {
 			logger.Errorf(context.Background(), "convert SERVER_PORT to int error: %v", err)
 		} else {
-			appConfig.Server.Port = port
 			appConfig.HTTP.Port = port
 		}
 	}
-	if value := os.Getenv("CS_IM_ACCESS_TOKEN"); value != "" {
-		appConfig.Access.AccessToken = value
+	if value := os.Getenv("GRPC_PORT"); value != "" {
+		port, err := strconv.Atoi(value)
+		if err != nil {
+			logger.Errorf(context.Background(), "convert GRPC_PORT to int error: %v", err)
+		} else {
+			appConfig.Server.Port = port
+		}
+	}
+	if value := os.Getenv("CS_IM_ACCOUNT_TOKEN"); value != "" {
+		appConfig.Access.AccountToken = value
 	}
 	if value := os.Getenv("CS_IM_TENANT_ID"); value != "" {
 		appConfig.Access.TenantID = value
+	}
+	if value := os.Getenv("CS_IM_DB_DSN"); value != "" {
+		appConfig.Database.DSN = value
 	}
 }
 

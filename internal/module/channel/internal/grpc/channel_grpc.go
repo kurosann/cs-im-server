@@ -1,0 +1,176 @@
+package grpc
+
+import (
+	"context"
+	"time"
+
+	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg"
+	"cs-im-server/pkg/grpcapi"
+	gatewayv1 "github.com/kurosann/cs-im-sdk/gateway/v1"
+)
+
+type ChannelGatewayGRPCAPI struct {
+	gatewayv1.UnimplementedChannelGatewayServiceServer
+	Accounts      *iampkg.AccountService
+	Apps          *gatewaypkg.AppService
+	Conversations *gatewaypkg.ConversationService
+	Messages      *gatewaypkg.MessageService
+	Realtime      *gatewaypkg.RealtimeService
+}
+
+func NewChannelGatewayGRPCAPI(accountService *iampkg.AccountService, appService *gatewaypkg.AppService, conversationService *gatewaypkg.ConversationService, messageService *gatewaypkg.MessageService, realtimeService *gatewaypkg.RealtimeService) *ChannelGatewayGRPCAPI {
+	return &ChannelGatewayGRPCAPI{
+		Accounts:      accountService,
+		Apps:          appService,
+		Conversations: conversationService,
+		Messages:      messageService,
+		Realtime:      realtimeService,
+	}
+}
+
+func (a *ChannelGatewayGRPCAPI) authorize(ctx context.Context, appID string) error {
+	principal, err := a.Accounts.Authenticate(ctx, grpcapi.AccountToken(ctx))
+	if err != nil {
+		return err
+	}
+	return a.Apps.AuthorizeAccount(appID, principal)
+}
+
+func conversationFromService(item gatewaypkg.Conversation, created bool) *gatewayv1.ConversationResponse {
+	return &gatewayv1.ConversationResponse{
+		ConversationId: item.ConversationKey,
+		AppId:          item.AppKey,
+		CustomerId:     item.CustomerKey,
+		Channel:        item.Channel,
+		Subject:        item.Subject,
+		Status:         item.Status,
+		Created:        created,
+	}
+}
+
+func (a *ChannelGatewayGRPCAPI) EnsureConversation(ctx context.Context, req *gatewayv1.EnsureConversationRequest) (*gatewayv1.ConversationResponse, error) {
+	if err := a.authorize(ctx, req.AppId); err != nil {
+		return nil, err
+	}
+	conversation, created, err := a.Conversations.Ensure(ctx, req.AppId, gatewaypkg.EnsureConversationRequest{
+		CustomerExternalID: req.CustomerExternalId,
+		CustomerName:       req.CustomerName,
+		Channel:            req.Channel,
+		Subject:            req.Subject,
+	})
+	if err != nil {
+		return nil, grpcapi.Error(err)
+	}
+	return conversationFromService(conversation, created), nil
+}
+
+func (a *ChannelGatewayGRPCAPI) messageFromService(item gatewaypkg.Message) *gatewayv1.Message {
+	source := (*gatewayv1.MessageSource)(nil)
+	if item.SourceAppKey != "" || item.SourceExternalID != "" || item.SourceSentAt != nil {
+		source = &gatewayv1.MessageSource{AppId: item.SourceAppKey, ExternalId: item.SourceExternalID}
+		if item.SourceSentAt != nil {
+			source.SentAt = item.SourceSentAt.Format(time.RFC3339Nano)
+		}
+	}
+	return &gatewayv1.Message{
+		MessageId:      item.MessageKey,
+		Seq:            item.Seq,
+		ConversationId: item.ConversationKey,
+		CustomerId:     item.CustomerKey,
+		Sender:         &gatewayv1.MessageSender{Role: item.SenderRole, Id: item.SenderID},
+		Source:         source,
+		Type:           item.Type,
+		Text:           item.Text,
+		Status:         item.Status,
+		ReceivedAt:     item.BaseModel.CreateAt.Format(time.RFC3339Nano),
+		CreatedAt:      item.CreatedAt().Format(time.RFC3339Nano),
+		UpdatedAt:      item.BaseModel.UpdateAt.Format(time.RFC3339Nano),
+	}
+}
+
+func (a *ChannelGatewayGRPCAPI) SendMessage(ctx context.Context, req *gatewayv1.SendMessageRequest) (*gatewayv1.MessageResponse, error) {
+	if err := a.authorize(ctx, req.AppId); err != nil {
+		return nil, err
+	}
+	request := gatewaypkg.CreateMessageRequest{
+		ConversationKey: req.ConversationId,
+		CustomerID:      req.CustomerId,
+		Sender:          gatewaypkg.MessageSender{Role: req.Sender.GetRole(), ID: req.Sender.GetId()},
+		Type:            req.Type,
+		Text:            req.Text,
+	}
+	if req.Source != nil {
+		request.Source = gatewaypkg.MessageSource{AppID: req.Source.AppId, ExternalID: req.Source.ExternalId}
+		if req.Source.SentAt != "" {
+			sentAt, err := time.Parse(time.RFC3339Nano, req.Source.SentAt)
+			if err != nil {
+				return nil, grpcapi.InvalidArgument("source.sentAt must use RFC3339")
+			}
+			request.Source.SentAt = &sentAt
+		}
+	}
+	message, err := a.Messages.CreateChannelMessage(ctx, req.AppId, request)
+	if err != nil {
+		return nil, grpcapi.Error(err)
+	}
+	return &gatewayv1.MessageResponse{Message: a.messageFromService(message)}, nil
+}
+
+func (a *ChannelGatewayGRPCAPI) ListMessages(ctx context.Context, req *gatewayv1.ListMessagesRequest) (*gatewayv1.ListMessagesResponse, error) {
+	if err := a.authorize(ctx, req.AppId); err != nil {
+		return nil, err
+	}
+	page, err := a.Messages.History(ctx, req.AppId, req.ConversationId, gatewaypkg.MessageHistoryFilter{
+		AfterSeq:  req.AfterSeq,
+		BeforeSeq: req.BeforeSeq,
+		Limit:     int(req.Limit),
+		Order:     req.Order,
+	})
+	if err != nil {
+		return nil, grpcapi.Error(err)
+	}
+	response := &gatewayv1.ListMessagesResponse{
+		NextAfterSeq:  page.NextAfterSeq,
+		NextBeforeSeq: page.NextBeforeSeq,
+		HasMore:       page.HasMore,
+		Items:         make([]*gatewayv1.Message, 0, len(page.Items)),
+	}
+	for _, item := range page.Items {
+		response.Items = append(response.Items, a.messageFromService(item))
+	}
+	return response, nil
+}
+
+func (a *ChannelGatewayGRPCAPI) StreamMessages(req *gatewayv1.StreamMessagesRequest, stream gatewayv1.ChannelGatewayService_StreamMessagesServer) error {
+	if err := a.authorize(stream.Context(), req.AppId); err != nil {
+		return err
+	}
+	events, closeFn, err := a.Realtime.Subscribe(stream.Context())
+	if err != nil {
+		return grpcapi.Error(err)
+	}
+	defer closeFn()
+	for {
+		select {
+		case <-stream.Context().Done():
+			return nil
+		case event, ok := <-events:
+			if !ok {
+				return nil
+			}
+			if !a.Messages.ChannelEventAllowed(req.AppId, event) {
+				continue
+			}
+			message, ok := event.Data.(gatewaypkg.Message)
+			if !ok {
+				continue
+			}
+			if err := stream.Send(&gatewayv1.MessageEventResponse{Message: a.messageFromService(message)}); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+var _ gatewayv1.ChannelGatewayServiceServer = (*ChannelGatewayGRPCAPI)(nil)

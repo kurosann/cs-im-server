@@ -3,11 +3,15 @@ module cs-im-server
 go 1.25.0
 
 require (
+	github.com/kurosann/cs-im-sdk v0.0.0-00010101000000-000000000000
+	google.golang.org/grpc v1.75.1
 	gopkg.in/yaml.v3 v3.0.1
+	gorm.io/gorm v1.31.0
 	vane-common v0.0.0
 )
 
 require (
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/AppsFlyer/go-sundheit v0.6.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/avast/retry-go v3.0.0+incompatible // indirect
@@ -34,6 +38,7 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.30.1 // indirect
+	github.com/go-sql-driver/mysql v1.10.1 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/gofrs/uuid/v5 v5.3.2 // indirect
@@ -93,11 +98,12 @@ require (
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250707201910-8d1bb00bc6a7 // indirect
-	google.golang.org/grpc v1.75.1 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
-	gorm.io/gorm v1.31.0 // indirect
+	gorm.io/driver/mysql v1.6.0 // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
 )
 
 replace vane-common => ../cs-im-common
+
+replace github.com/kurosann/cs-im-sdk => ../cs-im-sdk

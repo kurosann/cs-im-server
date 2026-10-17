@@ -24,7 +24,7 @@ make run
 ```bash
 export SERVER_HOST=0.0.0.0
 export SERVER_PORT=8080
-export CS_IM_ACCESS_TOKEN=dev-access-token
+export CS_IM_ACCOUNT_TOKEN=dev-access-token
 export CS_IM_TENANT_ID=dev-tenant
 ```
 
