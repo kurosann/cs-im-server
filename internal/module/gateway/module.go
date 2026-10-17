@@ -5,6 +5,7 @@ import (
 
 	"cs-im-server/internal/cfg"
 	"cs-im-server/internal/module/gateway/internal/api"
+	"cs-im-server/internal/module/gateway/internal/service"
 	"cs-im-server/pkg/httpmiddleware"
 	commonmodule "vane-common/module"
 )
@@ -26,15 +27,16 @@ type GatewayModule struct {
 }
 
 func NewGatewayModule() *GatewayModule {
+	gatewayService := service.NewService()
 	return &GatewayModule{
-		apps:          &api.AppAPI{},
-		customers:     &api.CustomerAPI{},
-		conversations: &api.ConversationAPI{},
-		messages:      &api.MessageAPI{},
-		channels:      &api.ChannelAPI{},
-		ai:            &api.AIAPI{},
-		webhooks:      &api.WebhookAPI{},
-		realtime:      &api.RealtimeAPI{},
+		apps:          &api.AppAPI{Service: gatewayService},
+		customers:     &api.CustomerAPI{Service: gatewayService},
+		conversations: &api.ConversationAPI{Service: gatewayService},
+		messages:      &api.MessageAPI{Service: gatewayService},
+		channels:      &api.ChannelAPI{Service: gatewayService},
+		ai:            &api.AIAPI{Service: gatewayService},
+		webhooks:      &api.WebhookAPI{Service: gatewayService},
+		realtime:      &api.RealtimeAPI{Service: gatewayService},
 	}
 }
 
@@ -61,7 +63,7 @@ func (m *GatewayModule) HttpApi() commonmodule.HttpApiInfo {
 		}
 		return cfg.GetConfig().Access.AccessToken
 	})
-	apiGroup := commonmodule.NewHttpRouteGroup("/api/v1", commonmodule.WithGroupMiddlewares(accessToken)).
+	apiGroup := commonmodule.NewHttpRouteGroup("/api/v1").
 		Compose(
 			m.apps.Routes(),
 			m.customers.Routes(),
@@ -71,11 +73,12 @@ func (m *GatewayModule) HttpApi() commonmodule.HttpApiInfo {
 			m.ai.Routes(),
 			m.webhooks.Routes(),
 		)
-	realtimeGroup := commonmodule.NewHttpRouteGroup("/ws/v1", commonmodule.WithGroupMiddlewares(accessToken)).
+	realtimeGroup := commonmodule.NewHttpRouteGroup("/ws/v1").
 		Compose(m.realtime.Routes())
 
 	return commonmodule.HttpApiInfo{
-		Prefix:   "",
-		Handlers: commonmodule.MergeHandlers(apiGroup.Handlers(), realtimeGroup.Handlers()),
+		Prefix:      "",
+		Handlers:    commonmodule.MergeHandlers(apiGroup.Handlers(), realtimeGroup.Handlers()),
+		Middlewares: []commonmodule.HttpMiddleware{accessToken},
 	}
 }

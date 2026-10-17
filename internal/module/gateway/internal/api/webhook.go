@@ -3,42 +3,90 @@ package api
 import (
 	"net/http"
 
+	"cs-im-server/internal/module/gateway/internal/service"
 	"cs-im-server/pkg/httpapi"
 	commonmodule "vane-common/module"
 )
 
-type WebhookAPI struct{}
+type WebhookAPI struct {
+	Service *service.Service
+}
 
 func (a *WebhookAPI) Create(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "webhook create entrypoint reserved")
+	var req service.CreateWebhookRequest
+	if err := ctx.BindJSON(&req); err != nil {
+		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	webhook, err := a.Service.CreateWebhook(ctx.Context(), req)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", webhook)
 }
 
 func (a *WebhookAPI) List(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "webhook list entrypoint reserved")
+	webhooks := a.Service.ListWebhooks(ctx.Context())
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", webhooks)
 }
 
 func (a *WebhookAPI) Get(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "webhook get entrypoint reserved")
+	webhook, err := a.Service.GetWebhook(ctx.Context(), ctx.Param("id"))
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", webhook)
 }
 
 func (a *WebhookAPI) Update(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "webhook update entrypoint reserved")
+	var req service.UpdateWebhookRequest
+	if err := ctx.BindJSON(&req); err != nil {
+		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	webhook, err := a.Service.UpdateWebhook(ctx.Context(), ctx.Param("id"), req)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", webhook)
 }
 
 func (a *WebhookAPI) Test(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "webhook test entrypoint reserved")
+	webhook, err := a.Service.TestWebhook(ctx.Context(), ctx.Param("id"))
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", webhook)
 }
 
 func (a *WebhookAPI) Enable(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "webhook enable entrypoint reserved")
+	webhook, err := a.Service.SetWebhookStatus(ctx.Context(), ctx.Param("id"), true)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", webhook)
 }
 
 func (a *WebhookAPI) Disable(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "webhook disable entrypoint reserved")
+	webhook, err := a.Service.SetWebhookStatus(ctx.Context(), ctx.Param("id"), false)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", webhook)
 }
 
 func (a *WebhookAPI) Delete(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "webhook delete entrypoint reserved")
+	if err := a.Service.DeleteWebhook(ctx.Context(), ctx.Param("id")); err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", nil)
 }
 
 func (a *WebhookAPI) Routes() commonmodule.HttpRouteGroup {

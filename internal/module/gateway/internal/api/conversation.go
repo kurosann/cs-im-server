@@ -3,42 +3,93 @@ package api
 import (
 	"net/http"
 
+	"cs-im-server/internal/module/gateway/internal/service"
 	"cs-im-server/pkg/httpapi"
 	commonmodule "vane-common/module"
 )
 
-type ConversationAPI struct{}
+type ConversationAPI struct {
+	Service *service.Service
+}
 
 func (a *ConversationAPI) Create(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "conversation create entrypoint reserved")
+	var req service.CreateConversationRequest
+	if err := ctx.BindJSON(&req); err != nil {
+		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	conversation, err := a.Service.CreateConversation(ctx.Context(), req)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", conversation)
 }
 
 func (a *ConversationAPI) List(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "conversation list entrypoint reserved")
+	conversations := a.Service.ListConversations(ctx.Context(), ctx.Query("appId"), ctx.Query("customerId"), ctx.Query("status"))
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", conversations)
 }
 
 func (a *ConversationAPI) Get(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "conversation get entrypoint reserved")
+	conversation, err := a.Service.GetConversation(ctx.Context(), ctx.Param("id"))
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", conversation)
 }
 
 func (a *ConversationAPI) Assign(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "conversation assign entrypoint reserved")
+	var req service.AssignConversationRequest
+	if err := ctx.BindJSON(&req); err != nil {
+		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	conversation, err := a.Service.AssignConversation(ctx.Context(), ctx.Param("id"), req)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", conversation)
 }
 
 func (a *ConversationAPI) Close(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "conversation close entrypoint reserved")
+	var req service.CloseConversationRequest
+	if err := ctx.BindJSON(&req); err != nil {
+		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	conversation, err := a.Service.CloseConversation(ctx.Context(), ctx.Param("id"), req)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", conversation)
 }
 
 func (a *ConversationAPI) Forward(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "conversation forward entrypoint reserved")
+	var req service.ForwardConversationRequest
+	if err := ctx.BindJSON(&req); err != nil {
+		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	delivery, err := a.Service.ForwardConversation(ctx.Context(), ctx.Param("id"), req)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", delivery)
 }
 
 func (a *ConversationAPI) Messages(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "conversation messages entrypoint reserved")
+	messages := a.Service.ConversationMessages(ctx.Context(), ctx.Param("id"))
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", messages)
 }
 
 func (a *ConversationAPI) Deliveries(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "conversation deliveries entrypoint reserved")
+	deliveries := a.Service.ConversationDeliveries(ctx.Context(), ctx.Param("id"))
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", deliveries)
 }
 
 func (a *ConversationAPI) Routes() commonmodule.HttpRouteGroup {

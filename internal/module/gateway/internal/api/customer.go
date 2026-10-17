@@ -3,26 +3,64 @@ package api
 import (
 	"net/http"
 
+	"cs-im-server/internal/module/gateway/internal/service"
 	"cs-im-server/pkg/httpapi"
 	commonmodule "vane-common/module"
 )
 
-type CustomerAPI struct{}
+type CustomerAPI struct {
+	Service *service.Service
+}
 
 func (a *CustomerAPI) Create(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "customer create entrypoint reserved")
+	var req service.CreateCustomerRequest
+	if err := ctx.BindJSON(&req); err != nil {
+		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	customer, err := a.Service.CreateCustomer(ctx.Context(), req)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", customer)
 }
 
 func (a *CustomerAPI) Get(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "customer get entrypoint reserved")
+	customer, err := a.Service.GetCustomer(ctx.Context(), ctx.Param("id"))
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", customer)
 }
 
 func (a *CustomerAPI) AddIdentity(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "customer identity add entrypoint reserved")
+	var req service.AddIdentityRequest
+	if err := ctx.BindJSON(&req); err != nil {
+		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	customer, err := a.Service.AddIdentity(ctx.Context(), ctx.Param("id"), req)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", customer)
 }
 
 func (a *CustomerAPI) Merge(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "customer merge entrypoint reserved")
+	var req service.MergeCustomerRequest
+	if err := ctx.BindJSON(&req); err != nil {
+		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	customer, err := a.Service.MergeCustomer(ctx.Context(), ctx.Param("id"), req)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", customer)
 }
 
 func (a *CustomerAPI) Routes() commonmodule.HttpRouteGroup {

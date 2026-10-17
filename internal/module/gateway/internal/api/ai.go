@@ -3,22 +3,30 @@ package api
 import (
 	"net/http"
 
+	"cs-im-server/internal/module/gateway/internal/service"
 	"cs-im-server/pkg/httpapi"
 	commonmodule "vane-common/module"
 )
 
-type AIAPI struct{}
+type AIAPI struct {
+	Service *service.Service
+}
 
 func (a *AIAPI) GetConfig(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "ai config get entrypoint reserved")
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", a.Service.GetAIConfig(ctx.Context()))
 }
 
 func (a *AIAPI) UpdateConfig(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "ai config update entrypoint reserved")
+	var req service.AIConfig
+	if err := ctx.BindJSON(&req); err != nil {
+		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", a.Service.UpdateAIConfig(ctx.Context(), req))
 }
 
 func (a *AIAPI) Executions(ctx httpapi.Context) {
-	httpapi.WriteError(ctx, http.StatusNotImplemented, "NOT_IMPLEMENTED", "ai executions entrypoint reserved")
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", a.Service.ListAIExecutions(ctx.Context()))
 }
 
 func (a *AIAPI) Routes() commonmodule.HttpRouteGroup {
