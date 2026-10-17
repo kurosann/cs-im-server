@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"cs-im-server/internal/module/gateway/service"
+	"cs-im-server/internal/module/gateway/internal/service"
 	"cs-im-server/pkg/httpapi"
 	commonmodule "vane-common/module"
 )

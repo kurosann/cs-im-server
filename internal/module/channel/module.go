@@ -23,10 +23,10 @@ func (m *Module) Model() []commonmodule.ModelRegInfo { return nil }
 func (m *Module) Api() []commonmodule.ApiRegInfo {
 	channelGateway := grpc.NewChannelGatewayGRPCAPI(
 		iampkg.Service(),
-		gatewaypkg.GetApp(),
-		gatewaypkg.GetConversation(),
-		gatewaypkg.GetMessage(),
-		gatewaypkg.GetRealtime(),
+		gatewaypkg.GetAppAuthorizer(),
+		gatewaypkg.GetConversationIngress(),
+		gatewaypkg.GetMessageIngress(),
+		gatewaypkg.GetRealtimeSubscriber(),
 	)
 	return []commonmodule.ApiRegInfo{
 		commonmodule.NewApiRegInfo(gatewayv1.ChannelGatewayService_ServiceDesc, channelGateway),
@@ -38,9 +38,9 @@ func (m *Module) Task() []commonmodule.TaskRegInfo { return nil }
 
 func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	channelHTTP := http.NewChannelIngressAPI(
-		gatewaypkg.GetApp(),
-		gatewaypkg.GetConversation(),
-		gatewaypkg.GetMessage(),
+		gatewaypkg.GetAppAuthorizer(),
+		gatewaypkg.GetConversationIngress(),
+		gatewaypkg.GetMessageIngress(),
 	)
 	routes := commonmodule.NewHttpRouteGroup("/api/v1").Compose(channelHTTP.Routes())
 	return commonmodule.HttpApiInfo{

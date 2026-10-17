@@ -32,7 +32,7 @@ type channelGatewayFixture struct {
 	appID          string
 	conversationID string
 	api            *ChannelGatewayGRPCAPI
-	realtime       *gatewaypkg.RealtimeService
+	realtime       gatewaypkg.RealtimeTestService
 	tokenCtx       context.Context
 }
 
@@ -51,12 +51,11 @@ func setupChannelGateway(t *testing.T) channelGatewayFixture {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
 
-	realtime := gatewaypkg.NewRealtimeService()
-	apps := gatewaypkg.NewAppService(realtime)
-	customers := gatewaypkg.NewCustomerService(realtime)
-	conversations := gatewaypkg.NewConversationService(apps, customers, nil, realtime)
-	messages := gatewaypkg.NewMessageService(apps, conversations, realtime)
-	conversations.SetMessages(gatewaypkg.NewConversationMessageStore(messages))
+	services := gatewaypkg.NewTestGatewayServices()
+	apps := services.Apps
+	conversations := services.Conversations
+	messages := services.Messages
+	realtime := services.Realtime
 	principal := iampkg.Principal{AccountKey: "account_1", TenantID: "tenant_1"}
 	app, err := apps.Register(context.Background(), principal, gatewaypkg.RegisterAppRequest{
 		ServiceKey: "service-1", DisplayName: "Service",

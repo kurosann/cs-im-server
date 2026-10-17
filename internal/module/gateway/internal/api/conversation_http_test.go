@@ -10,7 +10,7 @@ import (
 
 	commonmodule "vane-common/module"
 
-	"cs-im-server/internal/module/gateway/service"
+	"cs-im-server/internal/module/gateway/internal/service"
 )
 
 type fakeRequestContext struct {

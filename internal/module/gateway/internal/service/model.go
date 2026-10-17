@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"cs-im-server/internal/module/gateway/model"
+	"cs-im-server/internal/module/gateway/internal/model"
 	iampkg "cs-im-server/internal/module/iam/pkg"
 	relaypkg "cs-im-server/internal/module/relay/pkg"
 )

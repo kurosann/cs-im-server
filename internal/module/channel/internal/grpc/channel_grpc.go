@@ -13,13 +13,13 @@ import (
 type ChannelGatewayGRPCAPI struct {
 	gatewayv1.UnimplementedChannelGatewayServiceServer
 	Accounts      *iampkg.AccountService
-	Apps          *gatewaypkg.AppService
-	Conversations *gatewaypkg.ConversationService
-	Messages      *gatewaypkg.MessageService
-	Realtime      *gatewaypkg.RealtimeService
+	Apps          gatewaypkg.AppAuthorizer
+	Conversations gatewaypkg.ConversationIngress
+	Messages      gatewaypkg.MessageIngress
+	Realtime      gatewaypkg.RealtimeSubscriber
 }
 
-func NewChannelGatewayGRPCAPI(accountService *iampkg.AccountService, appService *gatewaypkg.AppService, conversationService *gatewaypkg.ConversationService, messageService *gatewaypkg.MessageService, realtimeService *gatewaypkg.RealtimeService) *ChannelGatewayGRPCAPI {
+func NewChannelGatewayGRPCAPI(accountService *iampkg.AccountService, appService gatewaypkg.AppAuthorizer, conversationService gatewaypkg.ConversationIngress, messageService gatewaypkg.MessageIngress, realtimeService gatewaypkg.RealtimeSubscriber) *ChannelGatewayGRPCAPI {
 	return &ChannelGatewayGRPCAPI{
 		Accounts:      accountService,
 		Apps:          appService,

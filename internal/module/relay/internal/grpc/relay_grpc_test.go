@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
 	iampkg "cs-im-server/internal/module/iam/pkg"
 	relayservice "cs-im-server/internal/module/relay/internal/service"
 	relayv1 "github.com/kurosann/cs-im-internal-sdk/relay/v1"
@@ -15,6 +14,10 @@ import (
 	"vane-common/pkg/dataaccess/store"
 	"vane-common/pkg/sqlitedb"
 )
+
+type realtimePublisherStub struct{}
+
+func (realtimePublisherStub) Publish(string, string, any) {}
 
 func setupRelayGRPC(t *testing.T) *RelayChannelGRPCAPI {
 	t.Helper()
@@ -29,7 +32,7 @@ func setupRelayGRPC(t *testing.T) *RelayChannelGRPCAPI {
 	}
 	return NewRelayChannelGRPCAPI(
 		iampkg.NewAccountService("bootstrap-token", "tenant_1"),
-		relayservice.NewRelayService(gatewaypkg.NewRealtimeService()),
+		relayservice.NewRelayService(realtimePublisherStub{}),
 	)
 }
 

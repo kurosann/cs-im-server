@@ -1,23 +1,22 @@
 package gateway
 
 import (
-	"cs-im-server/internal/module/gateway/model"
-	"cs-im-server/internal/module/gateway/service"
+	"context"
+	"cs-im-server/internal/module/gateway/internal/model"
+	"cs-im-server/internal/module/gateway/internal/service"
+	iampkg "cs-im-server/internal/module/iam/pkg"
 	"sync"
 )
 
 type (
 	App                = model.App
-	AppService         = service.AppService
 	RegisterAppRequest = service.RegisterAppRequest
 	HeartbeatRequest   = service.HeartbeatRequest
 
 	Customer         = model.Customer
 	CustomerIdentity = model.CustomerIdentity
-	CustomerService  = service.CustomerService
 
 	Conversation               = model.Conversation
-	ConversationService        = service.ConversationService
 	CreateConversationRequest  = service.CreateConversationRequest
 	AssignConversationRequest  = service.AssignConversationRequest
 	CloseConversationRequest   = service.CloseConversationRequest
@@ -27,107 +26,100 @@ type (
 	Message                    = model.Message
 	MessageSender              = model.MessageSender
 	MessageSource              = model.MessageSource
-	MessageService             = service.MessageService
 	CreateMessageRequest       = service.CreateMessageRequest
 	UpdateMessageStatusRequest = service.UpdateMessageStatusRequest
 	MessageHistoryFilter       = service.MessageHistoryFilter
 	MessageHistoryPage         = service.MessageHistoryPage
 
-	ConversationMessageStore = service.MessageStore
-
-	RealtimeEvent   = service.RealtimeEvent
-	RealtimeService = service.RealtimeService
+	RealtimeEvent = service.RealtimeEvent
 )
+
+type AppAuthorizer interface {
+	AuthorizeAccount(appID string, principal iampkg.Principal) error
+}
+
+type ConversationIngress interface {
+	Ensure(ctx context.Context, appID string, req EnsureConversationRequest) (Conversation, bool, error)
+	Get(ctx context.Context, id string) (Conversation, error)
+}
+
+type MessageIngress interface {
+	CreateChannelMessage(ctx context.Context, appID string, req CreateMessageRequest) (Message, error)
+	History(ctx context.Context, appID, conversationID string, filter MessageHistoryFilter) (MessageHistoryPage, error)
+	ChannelEventAllowed(appID string, event RealtimeEvent) bool
+}
+
+type RealtimeSubscriber interface {
+	Subscribe(ctx context.Context) (<-chan RealtimeEvent, func(), error)
+}
+
+type RealtimePublisher interface {
+	Publish(eventType, id string, data any)
+}
 
 var (
-	serviceMu        sync.RWMutex
-	realtimeService  *RealtimeService
-	appService       *AppService
-	customerService  *CustomerService
-	conversationServ *ConversationService
-	messageService   *MessageService
+	serviceMu           sync.RWMutex
+	appAuthorizer       AppAuthorizer
+	conversationIngress ConversationIngress
+	messageIngress      MessageIngress
+	realtimeSubscriber  RealtimeSubscriber
+	realtimePublisher   RealtimePublisher
 )
 
-func SetServices(
-	realtime *RealtimeService, apps *AppService, customers *CustomerService,
-	conversations *ConversationService, messages *MessageService,
+func SetCapabilities(
+	apps AppAuthorizer, conversations ConversationIngress, messages MessageIngress,
+	subscriber RealtimeSubscriber, publisher RealtimePublisher,
 ) {
 	serviceMu.Lock()
 	defer serviceMu.Unlock()
-	realtimeService = realtime
-	appService = apps
-	customerService = customers
-	conversationServ = conversations
-	messageService = messages
+	appAuthorizer = apps
+	conversationIngress = conversations
+	messageIngress = messages
+	realtimeSubscriber = subscriber
+	realtimePublisher = publisher
 }
 
-func GetRealtime() *RealtimeService {
+func GetAppAuthorizer() AppAuthorizer {
 	serviceMu.RLock()
 	defer serviceMu.RUnlock()
-	if realtimeService == nil {
-		panic("gateway realtime service is not initialized")
+	if appAuthorizer == nil {
+		panic("gateway app authorizer is not initialized")
 	}
-	return realtimeService
+	return appAuthorizer
 }
 
-func GetApp() *AppService {
+func GetConversationIngress() ConversationIngress {
 	serviceMu.RLock()
 	defer serviceMu.RUnlock()
-	if appService == nil {
-		panic("gateway app service is not initialized")
+	if conversationIngress == nil {
+		panic("gateway conversation ingress is not initialized")
 	}
-	return appService
+	return conversationIngress
 }
 
-func GetCustomer() *CustomerService {
+func GetMessageIngress() MessageIngress {
 	serviceMu.RLock()
 	defer serviceMu.RUnlock()
-	if customerService == nil {
-		panic("gateway customer service is not initialized")
+	if messageIngress == nil {
+		panic("gateway message ingress is not initialized")
 	}
-	return customerService
+	return messageIngress
 }
 
-func GetConversation() *ConversationService {
+func GetRealtimeSubscriber() RealtimeSubscriber {
 	serviceMu.RLock()
 	defer serviceMu.RUnlock()
-	if conversationServ == nil {
-		panic("gateway conversation service is not initialized")
+	if realtimeSubscriber == nil {
+		panic("gateway realtime subscriber is not initialized")
 	}
-	return conversationServ
+	return realtimeSubscriber
 }
 
-func GetMessage() *MessageService {
+func GetRealtimePublisher() RealtimePublisher {
 	serviceMu.RLock()
 	defer serviceMu.RUnlock()
-	if messageService == nil {
-		panic("gateway message service is not initialized")
+	if realtimePublisher == nil {
+		panic("gateway realtime publisher is not initialized")
 	}
-	return messageService
-}
-
-func NewRealtimeService() *RealtimeService { return service.NewRealtimeService() }
-
-func NewAppService(realtime *RealtimeService) *AppService {
-	return service.NewAppService(realtime)
-}
-
-func NewCustomerService(realtime *RealtimeService) *CustomerService {
-	return service.NewCustomerService(realtime)
-}
-
-func NewConversationService(
-	apps *AppService, customers *CustomerService, messages ConversationMessageStore, realtime *RealtimeService,
-) *ConversationService {
-	return service.NewConversationService(apps, customers, messages, realtime)
-}
-
-func NewMessageService(
-	apps *AppService, conversations *ConversationService, realtime *RealtimeService,
-) *MessageService {
-	return service.NewMessageService(apps, conversations, realtime)
-}
-
-func NewConversationMessageStore(messages *MessageService) ConversationMessageStore {
-	return service.NewConversationMessageStore(messages)
+	return realtimePublisher
 }

@@ -21,7 +21,7 @@ var _ commonmodule.IModuleDb = (*Module)(nil)
 type Module struct{}
 
 func (m *Module) Init(_ context.Context) error {
-	service := relayService.NewRelayService(gatewaypkg.GetRealtime())
+	service := relayService.NewRelayService(gatewaypkg.GetRealtimePublisher())
 	if err := service.Load(); err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	channels := relayhttp.NewChannelAPI(relaypkg.Service())
 	webhooks := relayhttp.NewWebhookAPI(relaypkg.Service())
 	ai := relayhttp.NewAIAPI(relaypkg.Service())
-	realtime := relayhttp.NewRealtimeAPI(gatewaypkg.GetApp(), gatewaypkg.GetMessage(), gatewaypkg.GetRealtime())
+	realtime := relayhttp.NewRealtimeAPI(gatewaypkg.GetAppAuthorizer(), gatewaypkg.GetMessageIngress(), gatewaypkg.GetRealtimeSubscriber())
 	admin := commonmodule.NewHttpRouteGroup("/admin/v1").
 		Compose(channels.Routes(), webhooks.Routes(), ai.Routes())
 	channelEvents := commonmodule.NewHttpRouteGroup("/api/v1").Compose(realtime.Routes())

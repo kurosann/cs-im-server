@@ -9,12 +9,12 @@ import (
 )
 
 type RealtimeAPI struct {
-	Apps       *gatewaypkg.AppService
-	MessageSvc *gatewaypkg.MessageService
-	Realtime   *gatewaypkg.RealtimeService
+	Apps       gatewaypkg.AppAuthorizer
+	MessageSvc gatewaypkg.MessageIngress
+	Realtime   gatewaypkg.RealtimeSubscriber
 }
 
-func NewRealtimeAPI(appService *gatewaypkg.AppService, messageService *gatewaypkg.MessageService, realtimeService *gatewaypkg.RealtimeService) *RealtimeAPI {
+func NewRealtimeAPI(appService gatewaypkg.AppAuthorizer, messageService gatewaypkg.MessageIngress, realtimeService gatewaypkg.RealtimeSubscriber) *RealtimeAPI {
 	return &RealtimeAPI{Apps: appService, MessageSvc: messageService, Realtime: realtimeService}
 }
 

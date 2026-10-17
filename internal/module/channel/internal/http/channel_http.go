@@ -11,12 +11,12 @@ import (
 )
 
 type ChannelIngressAPI struct {
-	Apps          *gatewaypkg.AppService
-	Conversations *gatewaypkg.ConversationService
-	MessageSvc    *gatewaypkg.MessageService
+	Apps          gatewaypkg.AppAuthorizer
+	Conversations gatewaypkg.ConversationIngress
+	MessageSvc    gatewaypkg.MessageIngress
 }
 
-func NewChannelIngressAPI(appService *gatewaypkg.AppService, conversationService *gatewaypkg.ConversationService, messageService *gatewaypkg.MessageService) *ChannelIngressAPI {
+func NewChannelIngressAPI(appService gatewaypkg.AppAuthorizer, conversationService gatewaypkg.ConversationIngress, messageService gatewaypkg.MessageIngress) *ChannelIngressAPI {
 	return &ChannelIngressAPI{
 		Apps:          appService,
 		Conversations: conversationService,
@@ -32,7 +32,7 @@ func appPrincipal(ctx httpapi.Context) (iampkg.Principal, error) {
 	return principal, nil
 }
 
-func authorizeChannel(ctx httpapi.Context, appID string, apps *gatewaypkg.AppService) error {
+func authorizeChannel(ctx httpapi.Context, appID string, apps gatewaypkg.AppAuthorizer) error {
 	principal, err := appPrincipal(ctx)
 	if err != nil {
 		return err

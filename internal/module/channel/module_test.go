@@ -4,18 +4,11 @@ import (
 	"testing"
 
 	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
-	"cs-im-server/internal/module/gateway/service"
 	"github.com/gin-gonic/gin"
 )
 
 func TestChannelHttpApiRoutesRegister(t *testing.T) {
-	realtime := gatewaypkg.NewRealtimeService()
-	apps := gatewaypkg.NewAppService(realtime)
-	customers := gatewaypkg.NewCustomerService(realtime)
-	conversations := gatewaypkg.NewConversationService(apps, customers, nil, realtime)
-	messages := gatewaypkg.NewMessageService(apps, conversations, realtime)
-	conversations.SetMessages(service.NewConversationMessageStore(messages))
-	gatewaypkg.SetServices(realtime, apps, customers, conversations, messages)
+	gatewaypkg.NewTestGatewayServices()
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()

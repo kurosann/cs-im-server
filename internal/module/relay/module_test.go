@@ -10,14 +10,8 @@ import (
 )
 
 func TestRelayHttpApiRoutesRegister(t *testing.T) {
-	realtime := gatewaypkg.NewRealtimeService()
-	apps := gatewaypkg.NewAppService(realtime)
-	customers := gatewaypkg.NewCustomerService(realtime)
-	conversations := gatewaypkg.NewConversationService(apps, customers, nil, realtime)
-	messages := gatewaypkg.NewMessageService(apps, conversations, realtime)
-	conversations.SetMessages(gatewaypkg.NewConversationMessageStore(messages))
-	gatewaypkg.SetServices(realtime, apps, customers, conversations, messages)
-	relaypkg.SetService(relayService.NewRelayService(realtime))
+	services := gatewaypkg.NewTestGatewayServices()
+	relaypkg.SetService(relayService.NewRelayService(services.Realtime))
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
