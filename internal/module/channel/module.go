@@ -37,7 +37,7 @@ func (m *Module) Job() []commonmodule.JobRegInfo   { return nil }
 func (m *Module) Task() []commonmodule.TaskRegInfo { return nil }
 
 func (m *Module) HttpApi() commonmodule.HttpApiInfo {
-	channelHTTP := http.NewChannelGatewayHTTPAPI(
+	channelHTTP := http.NewChannelIngressAPI(
 		gatewaypkg.GetApp(),
 		gatewaypkg.GetConversation(),
 		gatewaypkg.GetMessage(),

@@ -10,14 +10,14 @@ import (
 	commonmodule "vane-common/module"
 )
 
-type ChannelGatewayHTTPAPI struct {
+type ChannelIngressAPI struct {
 	Apps          *gatewaypkg.AppService
 	Conversations *gatewaypkg.ConversationService
 	MessageSvc    *gatewaypkg.MessageService
 }
 
-func NewChannelGatewayHTTPAPI(appService *gatewaypkg.AppService, conversationService *gatewaypkg.ConversationService, messageService *gatewaypkg.MessageService) *ChannelGatewayHTTPAPI {
-	return &ChannelGatewayHTTPAPI{
+func NewChannelIngressAPI(appService *gatewaypkg.AppService, conversationService *gatewaypkg.ConversationService, messageService *gatewaypkg.MessageService) *ChannelIngressAPI {
+	return &ChannelIngressAPI{
 		Apps:          appService,
 		Conversations: conversationService,
 		MessageSvc:    messageService,
@@ -40,7 +40,7 @@ func authorizeChannel(ctx httpapi.Context, appID string, apps *gatewaypkg.AppSer
 	return apps.AuthorizeAccount(appID, principal)
 }
 
-func (a *ChannelGatewayHTTPAPI) SendMessage(ctx httpapi.Context) {
+func (a *ChannelIngressAPI) SendMessage(ctx httpapi.Context) {
 	if err := authorizeChannel(ctx, ctx.Param("id"), a.Apps); err != nil {
 		writeServiceError(ctx, err)
 		return
@@ -58,7 +58,7 @@ func (a *ChannelGatewayHTTPAPI) SendMessage(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", message)
 }
 
-func (a *ChannelGatewayHTTPAPI) EnsureConversation(ctx httpapi.Context) {
+func (a *ChannelIngressAPI) EnsureConversation(ctx httpapi.Context) {
 	if err := authorizeChannel(ctx, ctx.Param("id"), a.Apps); err != nil {
 		writeServiceError(ctx, err)
 		return
@@ -76,7 +76,7 @@ func (a *ChannelGatewayHTTPAPI) EnsureConversation(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", map[string]any{"conversation": conversation, "created": created})
 }
 
-func (a *ChannelGatewayHTTPAPI) GetConversation(ctx httpapi.Context) {
+func (a *ChannelIngressAPI) GetConversation(ctx httpapi.Context) {
 	if err := authorizeChannel(ctx, ctx.Param("id"), a.Apps); err != nil {
 		writeServiceError(ctx, err)
 		return
@@ -89,7 +89,7 @@ func (a *ChannelGatewayHTTPAPI) GetConversation(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", conversation)
 }
 
-func (a *ChannelGatewayHTTPAPI) Messages(ctx httpapi.Context) {
+func (a *ChannelIngressAPI) Messages(ctx httpapi.Context) {
 	if err := authorizeChannel(ctx, ctx.Param("id"), a.Apps); err != nil {
 		writeServiceError(ctx, err)
 		return
@@ -107,7 +107,7 @@ func (a *ChannelGatewayHTTPAPI) Messages(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", page)
 }
 
-func (a *ChannelGatewayHTTPAPI) Routes() commonmodule.HttpRouteGroup {
+func (a *ChannelIngressAPI) Routes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/channels")
 	routes.Post("/:id/conversations/ensure", a.EnsureConversation)
 	routes.Get("/:id/conversations/:conversationId", a.GetConversation)
