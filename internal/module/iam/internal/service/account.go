@@ -14,6 +14,7 @@ import (
 type Principal struct {
 	AccountKey string
 	TenantID   string
+	Kind       string
 }
 
 type PrincipalContextKey struct{}
@@ -23,6 +24,7 @@ var ErrPrincipalMissing = errors.New("principal is missing")
 type AccountService struct {
 	accessor          dataaccess.DataAccessor[*model.AccountToken]
 	bootstrapToken    string
+	relayToken        string
 	bootstrapTenantID string
 }
 
@@ -30,13 +32,19 @@ type AccountTokenInfo struct {
 	AccountKey string `json:"accountKey"`
 	Name       string `json:"name"`
 	TenantID   string `json:"tenantId"`
+	Kind       string `json:"kind"`
 	Status     string `json:"status"`
 }
 
-func NewAccountService(bootstrapToken, tenantID string) *AccountService {
+func NewAccountService(bootstrapToken, tenantID string, relayToken ...string) *AccountService {
+	relayTokenValue := ""
+	if len(relayToken) > 0 {
+		relayTokenValue = relayToken[0]
+	}
 	return &AccountService{
 		accessor:          dataaccess.DataAccessor[*model.AccountToken]{},
 		bootstrapToken:    bootstrapToken,
+		relayToken:        relayTokenValue,
 		bootstrapTenantID: tenantID,
 	}
 }
@@ -67,12 +75,19 @@ func (s *AccountService) Authenticate(_ context.Context, token string) (Principa
 		if item.Status != "active" {
 			return Principal{}, forbidden("account token is disabled")
 		}
-		return Principal{AccountKey: item.AccountKey, TenantID: item.TenantID}, nil
+		kind := item.Kind
+		if kind == "" {
+			kind = PrincipalKindBusiness
+		}
+		return Principal{AccountKey: item.AccountKey, TenantID: item.TenantID, Kind: kind}, nil
+	}
+	if s.relayToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.relayToken)) == 1 {
+		return Principal{AccountKey: "relay-account", TenantID: s.bootstrapTenantID, Kind: PrincipalKindRelay}, nil
 	}
 	if s.bootstrapToken == "" || subtle.ConstantTimeCompare([]byte(token), []byte(s.bootstrapToken)) != 1 {
 		return Principal{}, unauthorized("invalid account token")
 	}
-	return Principal{AccountKey: "dev-account", TenantID: s.bootstrapTenantID}, nil
+	return Principal{AccountKey: "dev-account", TenantID: s.bootstrapTenantID, Kind: PrincipalKindBusiness}, nil
 }
 
 func (s *AccountService) Create(_ context.Context, token string, accountKey, name, tenantID string) (AccountTokenInfo, error) {
@@ -89,6 +104,7 @@ func (s *AccountService) Create(_ context.Context, token string, accountKey, nam
 		AccountKey: accountKey,
 		Name:       name,
 		TenantID:   tenantID,
+		Kind:       PrincipalKindBusiness,
 		TokenHash:  hashToken(token),
 		Status:     "active",
 	}
@@ -98,5 +114,5 @@ func (s *AccountService) Create(_ context.Context, token string, accountKey, nam
 	if err := s.accessor.Save(context.Background(), item); err != nil {
 		return AccountTokenInfo{}, err
 	}
-	return AccountTokenInfo{AccountKey: item.AccountKey, Name: item.Name, TenantID: item.TenantID, Status: item.Status}, nil
+	return AccountTokenInfo{AccountKey: item.AccountKey, Name: item.Name, TenantID: item.TenantID, Kind: item.Kind, Status: item.Status}, nil
 }

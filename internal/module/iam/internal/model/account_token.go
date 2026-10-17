@@ -13,6 +13,7 @@ type AccountToken struct {
 	AccountKey string `gorm:"column:account_key;size:64;not null;uniqueIndex:idx_account_tokens_account"`
 	Name       string `gorm:"column:name;size:255"`
 	TenantID   string `gorm:"column:tenant_id;size:64;not null;index"`
+	Kind       string `gorm:"column:kind;size:32;not null;default:business;index"`
 	TokenHash  string `gorm:"column:token_hash;size:64;not null;uniqueIndex"`
 	Status     string `gorm:"column:status;size:32;not null;default:active"`
 }

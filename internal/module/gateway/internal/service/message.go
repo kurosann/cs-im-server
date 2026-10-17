@@ -156,6 +156,16 @@ func (s *MessageService) CreateChannelMessage(_ context.Context, appID string, r
 	return s.Create(context.Background(), req)
 }
 
+func (s *MessageService) CreateRelayMessage(_ context.Context, relayID string, req CreateMessageRequest) (Message, error) {
+	if relayID == "" {
+		return Message{}, forbidden("relay identity is required")
+	}
+	req.Sender = MessageSender{Role: "agent", ID: relayID}
+	req.Source = MessageSource{}
+	req.CustomerID = ""
+	return s.Create(context.Background(), req)
+}
+
 func (s *MessageService) ChannelEventAllowed(appID string, event RealtimeEvent) bool {
 	if event.Type != "message.created" {
 		return false
@@ -166,6 +176,57 @@ func (s *MessageService) ChannelEventAllowed(appID string, event RealtimeEvent) 
 	}
 	conversation, err := s.conversations.Get(context.Background(), message.ConversationKey)
 	return err == nil && conversation.AppKey == appID
+}
+
+func (s *MessageService) RelayEventAllowed(event RealtimeEvent) bool {
+	if event.Type != "message.created" {
+		return false
+	}
+	message, ok := event.Data.(Message)
+	return ok && message.SenderRole == "customer"
+}
+
+func (s *MessageService) RelayHistory(_ context.Context, conversationID string, filter MessageHistoryFilter) (MessageHistoryPage, error) {
+	if filter.Order == "" {
+		filter.Order = "desc"
+	}
+	if filter.Order != "asc" && filter.Order != "desc" {
+		return MessageHistoryPage{}, badRequest("order must be asc or desc")
+	}
+	if filter.Limit <= 0 {
+		filter.Limit = 50
+	}
+	if filter.Limit > 100 {
+		filter.Limit = 100
+	}
+	if filter.AfterSeq > 0 && filter.BeforeSeq > 0 && filter.AfterSeq >= filter.BeforeSeq {
+		return MessageHistoryPage{}, badRequest("afterSeq must be less than beforeSeq")
+	}
+	if _, err := s.conversations.Get(context.Background(), conversationID); err != nil {
+		return MessageHistoryPage{}, err
+	}
+	messages := s.List(context.Background(), conversationID, filter.AfterSeq, filter.BeforeSeq, 0)
+	if filter.Order == "desc" {
+		for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+			messages[i], messages[j] = messages[j], messages[i]
+		}
+	}
+	page := MessageHistoryPage{Items: make([]Message, 0, filter.Limit)}
+	hasMore := len(messages) > filter.Limit
+	if hasMore {
+		messages = messages[:filter.Limit]
+	}
+	page.Items = messages
+	page.HasMore = hasMore
+	if len(messages) > 0 {
+		last := messages[len(messages)-1].Seq
+		if filter.Order == "asc" {
+			page.NextAfterSeq = last
+		} else {
+			page.NextBeforeSeq = last
+		}
+	}
+	return page, nil
 }
 
 func (s *MessageService) UpdateStatus(_ context.Context, id string, req UpdateMessageStatusRequest) (Message, error) {

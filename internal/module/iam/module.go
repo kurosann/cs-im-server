@@ -17,12 +17,14 @@ type Module struct{}
 
 func (m *Module) Init(_ context.Context) error {
 	bootstrapToken := "dev-access-token"
+	relayToken := "dev-relay-token"
 	tenantID := "dev-tenant"
 	if config := cfg.GetConfig(); config != nil {
 		bootstrapToken = config.Access.AccountToken
+		relayToken = config.Access.RelayToken
 		tenantID = config.Access.TenantID
 	}
-	pkg.SetService(iamService.NewAccountService(bootstrapToken, tenantID))
+	pkg.SetService(iamService.NewAccountService(bootstrapToken, tenantID, relayToken))
 	return nil
 }
 

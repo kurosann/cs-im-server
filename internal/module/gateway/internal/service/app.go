@@ -8,6 +8,8 @@ import (
 
 	"vane-common/pkg/dataaccess"
 	"vane-common/pkg/idutil"
+
+	iampkg "cs-im-server/internal/module/iam/pkg"
 )
 
 type AppService struct {
@@ -185,6 +187,9 @@ func (s *AppService) AuthorizeAccount(appID string, principal Principal) error {
 	}
 	if app.TenantID == "" || app.TenantID != principal.TenantID {
 		return forbidden("app %s does not belong to account tenant", appID)
+	}
+	if !principal.HasKind(iampkg.PrincipalKindBusiness) {
+		return forbidden("relay principal cannot access business channel")
 	}
 	return nil
 }

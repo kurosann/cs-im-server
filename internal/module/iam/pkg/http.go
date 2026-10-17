@@ -27,3 +27,19 @@ func AccountTokenMiddleware() commonmodule.HttpMiddleware {
 		}
 	}
 }
+
+func RequirePrincipalKind(kind string) commonmodule.HttpMiddleware {
+	return func(next commonmodule.HttpHandler) commonmodule.HttpHandler {
+		return func(ctx commonmodule.HttpReqContext) {
+			principal, ok := PrincipalFromContext(ctx.Context())
+			if !ok || !principal.HasKind(kind) {
+				_ = ctx.JSON(http.StatusForbidden, map[string]any{
+					"code":    "FORBIDDEN",
+					"message": "principal kind is not allowed",
+				})
+				return
+			}
+			next(ctx)
+		}
+	}
+}

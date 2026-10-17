@@ -37,6 +37,6 @@ func NewTestGatewayServices() GatewayTestServices {
 		Apps: apps, Conversations: conversations,
 		Messages: messages, Realtime: realtime,
 	}
-	gatewayruntime.SetCapabilities(apps, conversations, messages, realtime, realtime)
+	gatewayruntime.SetCapabilities(apps, conversations, messages, realtime, realtime, messages)
 	return services
 }

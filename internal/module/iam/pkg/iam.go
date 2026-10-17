@@ -16,6 +16,11 @@ type (
 	AccountToken        = model.AccountToken
 )
 
+const (
+	PrincipalKindBusiness = service.PrincipalKindBusiness
+	PrincipalKindRelay    = service.PrincipalKindRelay
+)
+
 var ErrPrincipalMissing = service.ErrPrincipalMissing
 
 var serviceMu sync.RWMutex

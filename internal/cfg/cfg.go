@@ -59,6 +59,7 @@ type PushGatewayConfig struct {
 
 type AccessConfig struct {
 	AccountToken string `yaml:"account_token"`
+	RelayToken   string `yaml:"relay_token"`
 	TenantID     string `yaml:"tenant_id"`
 }
 
@@ -134,6 +135,7 @@ func defaultConfig() *ConfigRoot {
 		},
 		Access: AccessConfig{
 			AccountToken: "dev-access-token",
+			RelayToken:   "dev-relay-token",
 			TenantID:     "dev-tenant",
 		},
 		HTTP: HTTPListenerConfig{
@@ -158,6 +160,9 @@ func applyDefaults(cfg *ConfigRoot) {
 	}
 	if cfg.Access.AccountToken == "" {
 		cfg.Access.AccountToken = "dev-access-token"
+	}
+	if cfg.Access.RelayToken == "" {
+		cfg.Access.RelayToken = "dev-relay-token"
 	}
 	if cfg.Access.TenantID == "" {
 		cfg.Access.TenantID = "dev-tenant"
@@ -190,6 +195,9 @@ func injectEnv() {
 	}
 	if value := os.Getenv("CS_IM_ACCOUNT_TOKEN"); value != "" {
 		appConfig.Access.AccountToken = value
+	}
+	if value := os.Getenv("CS_IM_RELAY_TOKEN"); value != "" {
+		appConfig.Access.RelayToken = value
 	}
 	if value := os.Getenv("CS_IM_TENANT_ID"); value != "" {
 		appConfig.Access.TenantID = value

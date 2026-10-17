@@ -27,6 +27,7 @@ log:
 
 access:
   account_token: "dev-access-token"
+  relay_token: "dev-relay-token"
   tenant_id: "dev-tenant"
 
 database:

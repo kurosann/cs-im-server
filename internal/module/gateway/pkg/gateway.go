@@ -38,6 +38,7 @@ type (
 	MessageIngress      = gatewayruntime.MessageIngress
 	RealtimeSubscriber  = gatewayruntime.RealtimeSubscriber
 	RealtimePublisher   = gatewayruntime.RealtimePublisher
+	MessageEgress       = gatewayruntime.MessageEgress
 )
 
 func GetAppAuthorizer() AppAuthorizer {
@@ -50,6 +51,10 @@ func GetConversationIngress() ConversationIngress {
 
 func GetMessageIngress() MessageIngress {
 	return gatewayruntime.MessageIngressCapability()
+}
+
+func GetMessageEgress() MessageEgress {
+	return gatewayruntime.MessageEgressCapability()
 }
 
 func GetRealtimeSubscriber() RealtimeSubscriber {

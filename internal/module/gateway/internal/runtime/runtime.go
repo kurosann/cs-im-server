@@ -24,6 +24,12 @@ type MessageIngress interface {
 	ChannelEventAllowed(appID string, event service.RealtimeEvent) bool
 }
 
+type MessageEgress interface {
+	CreateRelayMessage(ctx context.Context, relayID string, req service.CreateMessageRequest) (model.Message, error)
+	RelayHistory(ctx context.Context, conversationID string, filter service.MessageHistoryFilter) (service.MessageHistoryPage, error)
+	RelayEventAllowed(event service.RealtimeEvent) bool
+}
+
 type RealtimeSubscriber interface {
 	Subscribe(ctx context.Context) (<-chan service.RealtimeEvent, func(), error)
 }
@@ -37,6 +43,7 @@ var (
 	appAuthorizer       AppAuthorizer
 	conversationIngress ConversationIngress
 	messageIngress      MessageIngress
+	messageEgress       MessageEgress
 	realtimeSubscriber  RealtimeSubscriber
 	realtimePublisher   RealtimePublisher
 )
@@ -44,12 +51,14 @@ var (
 func SetCapabilities(
 	apps AppAuthorizer, conversations ConversationIngress, messages MessageIngress,
 	subscriber RealtimeSubscriber, publisher RealtimePublisher,
+	egress MessageEgress,
 ) {
 	serviceMu.Lock()
 	defer serviceMu.Unlock()
 	appAuthorizer = apps
 	conversationIngress = conversations
 	messageIngress = messages
+	messageEgress = egress
 	realtimeSubscriber = subscriber
 	realtimePublisher = publisher
 }
@@ -79,6 +88,15 @@ func MessageIngressCapability() MessageIngress {
 		panic("gateway message ingress is not initialized")
 	}
 	return messageIngress
+}
+
+func MessageEgressCapability() MessageEgress {
+	serviceMu.RLock()
+	defer serviceMu.RUnlock()
+	if messageEgress == nil {
+		panic("gateway message egress is not initialized")
+	}
+	return messageEgress
 }
 
 func RealtimeSubscriberCapability() RealtimeSubscriber {
