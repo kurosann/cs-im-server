@@ -1,0 +1,30 @@
+server:
+  host: "127.0.0.1"
+  port: 8080
+  disable_grpc: true
+  standalone: true
+  telemetry:
+    port: 0
+    disable_health_check: false
+    disable_prometheus: false
+    push_gateway:
+      enabled: false
+      url: ""
+      job_name: "cs-im-server"
+      username: ""
+      password: ""
+      push_gap: 15
+
+log:
+  name: "cs-im-server"
+  log_path: ""
+  level: debug
+  max_size: 100
+  max_backup: 10
+  max_age: 7
+  hide_console: false
+  console_encode: true
+
+access:
+  access_token: "dev-access-token"
+  tenant_id: "dev-tenant"
