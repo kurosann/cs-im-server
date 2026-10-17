@@ -32,9 +32,9 @@ func NewChannelGatewayGRPCAPI(accountService *iampkg.AccountService, appService 
 func (a *ChannelGatewayGRPCAPI) authorize(ctx context.Context, appID string) error {
 	principal, err := a.Accounts.Authenticate(ctx, grpcapi.AccountToken(ctx))
 	if err != nil {
-		return err
+		return grpcapi.Error(err)
 	}
-	return a.Apps.AuthorizeAccount(appID, principal)
+	return grpcapi.Error(a.Apps.AuthorizeAccount(appID, principal))
 }
 
 func conversationFromService(item gatewaypkg.Conversation, created bool) *gatewayv1.ConversationResponse {

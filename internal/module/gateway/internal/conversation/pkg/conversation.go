@@ -62,6 +62,10 @@ func Init(apps *apppkg.AppService, customers *customerpkg.CustomerService, realt
 	return nil
 }
 
+func NewConversationService(apps *apppkg.AppService, customers *customerpkg.CustomerService, messages MessageStore, realtime *realtimepkg.RealtimeService) *ConversationService {
+	return service.NewConversationService(apps, customers, messages, realtime)
+}
+
 func Models() []commonmodule.ModelRegInfo {
 	return []commonmodule.ModelRegInfo{commonmodule.NewModelRegInfo(&model.Conversation{})}
 }

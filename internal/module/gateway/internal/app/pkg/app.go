@@ -46,6 +46,10 @@ func Init(realtime *RealtimeService) error {
 	return nil
 }
 
+func NewAppService(realtime *RealtimeService) *AppService {
+	return service.NewAppService(realtime)
+}
+
 func Models() []commonmodule.ModelRegInfo {
 	return []commonmodule.ModelRegInfo{commonmodule.NewModelRegInfo(&model.App{})}
 }

@@ -34,4 +34,8 @@ func Service() *RealtimeService {
 
 func Init() { SetService(service.NewRealtimeService()) }
 
+func NewRealtimeService() *RealtimeService {
+	return service.NewRealtimeService()
+}
+
 func Routes() commonmodule.HttpRouteGroup { return realtimehttp.NewRealtimeAPI(Service()).Routes() }

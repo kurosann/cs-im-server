@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	model "cs-im-server/internal/module/iam/internal/model"
 	service "cs-im-server/internal/module/iam/internal/service"
 )
 
@@ -12,6 +13,7 @@ type (
 	PrincipalContextKey = service.PrincipalContextKey
 	AccountService      = service.AccountService
 	AccountTokenInfo    = service.AccountTokenInfo
+	AccountToken        = model.AccountToken
 )
 
 var ErrPrincipalMissing = service.ErrPrincipalMissing
@@ -32,6 +34,10 @@ func Service() *AccountService {
 		panic("iam service is not initialized")
 	}
 	return accountService
+}
+
+func NewAccountService(bootstrapToken, tenantID string) *AccountService {
+	return service.NewAccountService(bootstrapToken, tenantID)
 }
 
 func WithPrincipal(ctx context.Context, principal Principal) context.Context {

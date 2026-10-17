@@ -35,6 +35,8 @@ type (
 	MessageHistoryFilter       = messagepkg.MessageHistoryFilter
 	MessageHistoryPage         = messagepkg.MessageHistoryPage
 
+	ConversationMessageStore = conversationpkg.MessageStore
+
 	RealtimeEvent   = realtimepkg.RealtimeEvent
 	RealtimeService = realtimepkg.RealtimeService
 )
@@ -44,3 +46,29 @@ func GetCustomer() *CustomerService         { return customerpkg.Service() }
 func GetConversation() *ConversationService { return conversationpkg.Service() }
 func GetMessage() *MessageService           { return messagepkg.Service() }
 func GetRealtime() *RealtimeService         { return realtimepkg.Service() }
+
+func NewRealtimeService() *RealtimeService { return realtimepkg.NewRealtimeService() }
+
+func NewAppService(realtime *RealtimeService) *AppService {
+	return apppkg.NewAppService(realtime)
+}
+
+func NewCustomerService(realtime *RealtimeService) *CustomerService {
+	return customerpkg.NewCustomerService(realtime)
+}
+
+func NewConversationService(
+	apps *AppService, customers *CustomerService, messages ConversationMessageStore, realtime *RealtimeService,
+) *ConversationService {
+	return conversationpkg.NewConversationService(apps, customers, messages, realtime)
+}
+
+func NewMessageService(
+	apps *AppService, conversations *ConversationService, realtime *RealtimeService,
+) *MessageService {
+	return messagepkg.NewMessageService(apps, conversations, realtime)
+}
+
+func NewConversationMessageStore(messages *MessageService) ConversationMessageStore {
+	return messagepkg.NewConversationMessageStore(messages)
+}

@@ -34,7 +34,7 @@ func (m *Module) Init(_ context.Context) error {
 	if err := messagepkg.Init(apppkg.Service(), conversationpkg.Service(), realtimepkg.Service()); err != nil {
 		return err
 	}
-	conversationpkg.SetMessages(messagepkg.NewConversationMessageStore())
+	conversationpkg.SetMessages(messagepkg.NewConversationMessageStore(messagepkg.Service()))
 	return nil
 }
 

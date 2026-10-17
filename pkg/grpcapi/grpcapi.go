@@ -31,6 +31,9 @@ func InvalidArgument(format string, args ...any) error {
 }
 
 func Error(err error) error {
+	if err == nil {
+		return nil
+	}
 	serviceErr, ok := apperr.From(err)
 	if !ok {
 		return status.Error(codes.Internal, err.Error())

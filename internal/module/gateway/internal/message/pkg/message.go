@@ -51,6 +51,10 @@ func Init(apps *apppkg.AppService, conversations *conversationpkg.ConversationSe
 	return nil
 }
 
+func NewMessageService(apps *apppkg.AppService, conversations *conversationpkg.ConversationService, realtime *realtimepkg.RealtimeService) *MessageService {
+	return service.NewMessageService(apps, conversations, realtime)
+}
+
 func Models() []commonmodule.ModelRegInfo {
 	return []commonmodule.ModelRegInfo{commonmodule.NewModelRegInfo(&model.Message{})}
 }
@@ -61,6 +65,6 @@ func ConversationRoutes() commonmodule.HttpRouteGroup {
 	return messagehttp.NewMessageAPI(Service()).ConversationRoutes()
 }
 
-func NewConversationMessageStore() conversationpkg.MessageStore {
-	return service.NewConversationMessageStore(Service())
+func NewConversationMessageStore(messages *MessageService) conversationpkg.MessageStore {
+	return service.NewConversationMessageStore(messages)
 }

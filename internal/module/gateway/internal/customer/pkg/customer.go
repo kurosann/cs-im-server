@@ -48,6 +48,10 @@ func Init(realtime *realtimepkg.RealtimeService) error {
 	return nil
 }
 
+func NewCustomerService(realtime *realtimepkg.RealtimeService) *CustomerService {
+	return service.NewCustomerService(realtime)
+}
+
 func Models() []commonmodule.ModelRegInfo {
 	return []commonmodule.ModelRegInfo{commonmodule.NewModelRegInfo(&model.Customer{})}
 }

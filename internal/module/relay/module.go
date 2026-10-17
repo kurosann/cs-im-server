@@ -5,10 +5,12 @@ import (
 
 	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
 	iampkg "cs-im-server/internal/module/iam/pkg"
+	relaygrpc "cs-im-server/internal/module/relay/internal/grpc"
 	relayhttp "cs-im-server/internal/module/relay/internal/http"
 	relaymodel "cs-im-server/internal/module/relay/internal/model"
 	relayService "cs-im-server/internal/module/relay/internal/service"
 	relaypkg "cs-im-server/internal/module/relay/pkg"
+	relayv1 "github.com/kurosann/cs-im-internal-sdk/relay/v1"
 	commonmodule "vane-common/module"
 )
 
@@ -37,7 +39,14 @@ func (m *Module) Model() []commonmodule.ModelRegInfo {
 	}
 }
 
-func (m *Module) Api() []commonmodule.ApiRegInfo   { return nil }
+func (m *Module) Api() []commonmodule.ApiRegInfo {
+	return []commonmodule.ApiRegInfo{
+		commonmodule.NewApiRegInfo(
+			relayv1.RelayChannelService_ServiceDesc,
+			relaygrpc.NewRelayChannelGRPCAPI(iampkg.Service(), relaypkg.Service()),
+		),
+	}
+}
 func (m *Module) Job() []commonmodule.JobRegInfo   { return nil }
 func (m *Module) Task() []commonmodule.TaskRegInfo { return nil }
 
