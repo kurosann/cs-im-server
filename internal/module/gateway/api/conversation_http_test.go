@@ -1,4 +1,4 @@
-package http
+package api
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 
 	commonmodule "vane-common/module"
 
-	service "cs-im-server/internal/module/gateway/internal/conversation/internal/service"
+	"cs-im-server/internal/module/gateway/service"
 )
 
 type fakeRequestContext struct {

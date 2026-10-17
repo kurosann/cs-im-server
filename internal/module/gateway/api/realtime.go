@@ -1,7 +1,7 @@
-package http
+package api
 
 import (
-	"cs-im-server/internal/module/gateway/internal/realtime/internal/service"
+	"cs-im-server/internal/module/gateway/service"
 	"cs-im-server/pkg/httpapi"
 	"cs-im-server/pkg/sse"
 	commonmodule "vane-common/module"

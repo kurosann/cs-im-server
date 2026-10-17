@@ -1,74 +1,133 @@
 package gateway
 
 import (
-	apppkg "cs-im-server/internal/module/gateway/internal/app/pkg"
-	conversationpkg "cs-im-server/internal/module/gateway/internal/conversation/pkg"
-	customerpkg "cs-im-server/internal/module/gateway/internal/customer/pkg"
-	messagepkg "cs-im-server/internal/module/gateway/internal/message/pkg"
-	realtimepkg "cs-im-server/internal/module/gateway/internal/realtime/pkg"
+	"cs-im-server/internal/module/gateway/model"
+	"cs-im-server/internal/module/gateway/service"
+	"sync"
 )
 
 type (
-	App                = apppkg.App
-	AppService         = apppkg.AppService
-	RegisterAppRequest = apppkg.RegisterAppRequest
-	HeartbeatRequest   = apppkg.HeartbeatRequest
+	App                = model.App
+	AppService         = service.AppService
+	RegisterAppRequest = service.RegisterAppRequest
+	HeartbeatRequest   = service.HeartbeatRequest
 
-	Customer         = customerpkg.Customer
-	CustomerIdentity = customerpkg.CustomerIdentity
-	CustomerService  = customerpkg.CustomerService
+	Customer         = model.Customer
+	CustomerIdentity = model.CustomerIdentity
+	CustomerService  = service.CustomerService
 
-	Conversation               = conversationpkg.Conversation
-	ConversationService        = conversationpkg.ConversationService
-	CreateConversationRequest  = conversationpkg.CreateConversationRequest
-	AssignConversationRequest  = conversationpkg.AssignConversationRequest
-	CloseConversationRequest   = conversationpkg.CloseConversationRequest
-	ForwardConversationRequest = conversationpkg.ForwardConversationRequest
-	EnsureConversationRequest  = conversationpkg.EnsureConversationRequest
+	Conversation               = model.Conversation
+	ConversationService        = service.ConversationService
+	CreateConversationRequest  = service.CreateConversationRequest
+	AssignConversationRequest  = service.AssignConversationRequest
+	CloseConversationRequest   = service.CloseConversationRequest
+	ForwardConversationRequest = service.ForwardConversationRequest
+	EnsureConversationRequest  = service.EnsureConversationRequest
 
-	Message                    = messagepkg.Message
-	MessageSender              = messagepkg.MessageSender
-	MessageSource              = messagepkg.MessageSource
-	MessageService             = messagepkg.MessageService
-	CreateMessageRequest       = messagepkg.CreateMessageRequest
-	UpdateMessageStatusRequest = messagepkg.UpdateMessageStatusRequest
-	MessageHistoryFilter       = messagepkg.MessageHistoryFilter
-	MessageHistoryPage         = messagepkg.MessageHistoryPage
+	Message                    = model.Message
+	MessageSender              = model.MessageSender
+	MessageSource              = model.MessageSource
+	MessageService             = service.MessageService
+	CreateMessageRequest       = service.CreateMessageRequest
+	UpdateMessageStatusRequest = service.UpdateMessageStatusRequest
+	MessageHistoryFilter       = service.MessageHistoryFilter
+	MessageHistoryPage         = service.MessageHistoryPage
 
-	ConversationMessageStore = conversationpkg.MessageStore
+	ConversationMessageStore = service.MessageStore
 
-	RealtimeEvent   = realtimepkg.RealtimeEvent
-	RealtimeService = realtimepkg.RealtimeService
+	RealtimeEvent   = service.RealtimeEvent
+	RealtimeService = service.RealtimeService
 )
 
-func GetApp() *AppService                   { return apppkg.Service() }
-func GetCustomer() *CustomerService         { return customerpkg.Service() }
-func GetConversation() *ConversationService { return conversationpkg.Service() }
-func GetMessage() *MessageService           { return messagepkg.Service() }
-func GetRealtime() *RealtimeService         { return realtimepkg.Service() }
+var (
+	serviceMu        sync.RWMutex
+	realtimeService  *RealtimeService
+	appService       *AppService
+	customerService  *CustomerService
+	conversationServ *ConversationService
+	messageService   *MessageService
+)
 
-func NewRealtimeService() *RealtimeService { return realtimepkg.NewRealtimeService() }
+func SetServices(
+	realtime *RealtimeService, apps *AppService, customers *CustomerService,
+	conversations *ConversationService, messages *MessageService,
+) {
+	serviceMu.Lock()
+	defer serviceMu.Unlock()
+	realtimeService = realtime
+	appService = apps
+	customerService = customers
+	conversationServ = conversations
+	messageService = messages
+}
+
+func GetRealtime() *RealtimeService {
+	serviceMu.RLock()
+	defer serviceMu.RUnlock()
+	if realtimeService == nil {
+		panic("gateway realtime service is not initialized")
+	}
+	return realtimeService
+}
+
+func GetApp() *AppService {
+	serviceMu.RLock()
+	defer serviceMu.RUnlock()
+	if appService == nil {
+		panic("gateway app service is not initialized")
+	}
+	return appService
+}
+
+func GetCustomer() *CustomerService {
+	serviceMu.RLock()
+	defer serviceMu.RUnlock()
+	if customerService == nil {
+		panic("gateway customer service is not initialized")
+	}
+	return customerService
+}
+
+func GetConversation() *ConversationService {
+	serviceMu.RLock()
+	defer serviceMu.RUnlock()
+	if conversationServ == nil {
+		panic("gateway conversation service is not initialized")
+	}
+	return conversationServ
+}
+
+func GetMessage() *MessageService {
+	serviceMu.RLock()
+	defer serviceMu.RUnlock()
+	if messageService == nil {
+		panic("gateway message service is not initialized")
+	}
+	return messageService
+}
+
+func NewRealtimeService() *RealtimeService { return service.NewRealtimeService() }
 
 func NewAppService(realtime *RealtimeService) *AppService {
-	return apppkg.NewAppService(realtime)
+	return service.NewAppService(realtime)
 }
 
 func NewCustomerService(realtime *RealtimeService) *CustomerService {
-	return customerpkg.NewCustomerService(realtime)
+	return service.NewCustomerService(realtime)
 }
 
 func NewConversationService(
 	apps *AppService, customers *CustomerService, messages ConversationMessageStore, realtime *RealtimeService,
 ) *ConversationService {
-	return conversationpkg.NewConversationService(apps, customers, messages, realtime)
+	return service.NewConversationService(apps, customers, messages, realtime)
 }
 
 func NewMessageService(
 	apps *AppService, conversations *ConversationService, realtime *RealtimeService,
 ) *MessageService {
-	return messagepkg.NewMessageService(apps, conversations, realtime)
+	return service.NewMessageService(apps, conversations, realtime)
 }
 
 func NewConversationMessageStore(messages *MessageService) ConversationMessageStore {
-	return messagepkg.NewConversationMessageStore(messages)
+	return service.NewConversationMessageStore(messages)
 }

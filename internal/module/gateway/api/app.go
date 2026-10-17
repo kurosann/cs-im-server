@@ -1,10 +1,10 @@
-package http
+package api
 
 import (
 	"context"
 	"net/http"
 
-	"cs-im-server/internal/module/gateway/internal/app/internal/service"
+	"cs-im-server/internal/module/gateway/service"
 	iampkg "cs-im-server/internal/module/iam/pkg"
 	"cs-im-server/pkg/httpapi"
 	"cs-im-server/pkg/seqquery"
