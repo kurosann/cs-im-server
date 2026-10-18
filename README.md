@@ -1,77 +1,133 @@
 # cs-im-server
 
-聚合客服系统的核心后端服务。
+CS IM 聚合客服系统的后端服务。当前处于可联调阶段，提供核心数据模型、业务渠道入口和转发渠道出口。
 
-当前阶段提供最小可运行骨架，用来承载产品规划中的对外 API：
+## 模块边界
 
-- 租户访问控制
-- 业务 App 注册与心跳
-- 客户、会话、消息
-- 路由分配
-- 转发渠道配置
-- 转发投递记录
+服务按业务能力拆分模块，模块内部封装 `internal`，只通过模块级 `pkg` 暴露最小能力接口：
 
-## 运行
+### `iam`：身份与访问控制
+
+`iam` 只负责“谁在调用系统”，不承载业务规则。
+
+- 初始化业务访问 Token、转发渠道 Token 和默认租户。
+- 校验 Token，并把 `business`、`relay` 两类身份放入请求上下文。
+- 提供 `AccountTokenMiddleware` 和 `RequirePrincipalKind`，供各模块声明可访问的身份类型。
+- 持久化 `AccountToken` 模型。
+
+### `gateway`：核心领域与数据所有权
+
+`gateway` 是系统的领域核心，拥有主数据和核心流转规则，但不是对外协议入口。
+
+- 管理业务 App、客户、会话和消息。
+- 维护消息序列、消息历史和实时事件发布/订阅。
+- 对客服聚合系统提供 `/admin/v1` 管理接口。
+- 通过 `pkg/gateway.go` 暴露 `AppAuthorizer`、`ConversationIngress`、`MessageIngress`、`MessageEgress`、`RealtimeSubscriber` 等窄接口。
+
+`gateway/internal/service` 只能被本模块访问。`channel` 和 `relay` 只能调用 `gateway/pkg` 中的能力门面。
+
+### `channel`：业务渠道入口
+
+`channel` 面向 WhatsApp、Telegram、网页客服等业务采集端，负责把客户消息从外部渠道引入系统。
+
+- 实现 `cs-im-sdk` 中的 `ChannelGatewayService` gRPC 契约。
+- 提供 `/api/v1/channels` HTTP 入口，包括建会话、发送客户消息、查询历史消息和订阅客服消息。
+- 先校验业务身份和 App 授权，再调用 `gateway` 的 ingress 能力。
+- 业务身份只能发送客户消息、接收客服消息，不能发送客服消息。
+
+`channel` 不定义会话和消息持久化规则，也不保存核心领域数据。
+
+### `relay`：转发渠道出口
+
+`relay` 面向私有转发渠道和外部投递能力，负责把客服侧内容送出去。
+
+- 实现 `cs-im-internal-sdk` 中的 `RelayChannelService` gRPC 契约。
+- 管理转发渠道、Webhook、AI 配置和投递记录。
+- 对管理侧提供 `/admin/v1` 配置接口。
+- 对转发渠道提供 `/api/v1` 客服消息发送、客户消息订阅和历史消息能力。
+- relay 身份只能发送客服消息、接收客户消息，不能冒充业务渠道发送客户消息。
+
+`relay` 是出口编排层；最终的会话、客户、消息等核心数据仍归属 `gateway`。
+
+### `system`：服务基础信息
+
+`system` 提供服务版本、构建分支、提交号和构建时间等基础信息，不包含业务能力。
+
+边界关系：
+
+```text
+业务渠道 -> channel -> gateway
+客服聚合系统 -> gateway
+relay 身份/转发渠道 -> relay -> gateway -> 外部转发渠道
+```
+
+`channel` 不直接访问 `gateway/internal/service`，只能使用 `gateway/pkg` 暴露的接口能力；`relay` 同理。
+
+## 本地运行
 
 ```bash
 make run
 ```
 
-默认监听 `127.0.0.1:8080`，开发 Token 为 `dev-access-token`，默认租户为 `dev-tenant`。
-
-可用环境变量：
+默认读取 `./config/config.yaml`。配置中 gRPC 监听 `127.0.0.1:19091`；若未显式配置 HTTP 端口，则沿用同一端口。开发时可显式覆盖：
 
 ```bash
-export SERVER_HOST=0.0.0.0
-export SERVER_PORT=8080
-export CS_IM_ACCOUNT_TOKEN=dev-access-token
-export CS_IM_TENANT_ID=dev-tenant
+SERVER_HOST=127.0.0.1 SERVER_PORT=8080 make run
 ```
 
-服务启动方式与 `vane-api-server` 保持一致：
+数据库连接：
 
 ```bash
+CS_IM_DB_DSN="user:password@tcp(host:port)/cs_im_dev?charset=utf8mb4&parseTime=true&loc=Local" \
+  SERVER_PORT=8080 make run
+```
+
+开发访问标识：
+
+- 业务渠道 Token：`dev-access-token`
+- 转发渠道 Token：`dev-relay-token`
+- 默认租户：`dev-tenant`
+
+Token 可通过 `CS_IM_ACCOUNT_TOKEN`、`CS_IM_RELAY_TOKEN`、`CS_IM_TENANT_ID` 覆盖。
+
+## 构建与测试
+
+```bash
+make test
 make build
 ./bin/cs-im-server start -c ./config/config.yaml
 ./bin/cs-im-server version
 ```
 
-## 健康检查
+版本接口：
 
 ```bash
-curl http://127.0.0.1:8080/healthz
-```
-
-构建时会注入与 `vane-api-server` 一致的版本元数据：
-
-```bash
-make build
 curl -H "Authorization: Bearer dev-access-token" \
   http://127.0.0.1:8080/api/v1/version
 ```
 
-创建业务 App：
+健康检查、Prometheus 等遥测能力由 `cs-im-common` 内置，本工程不单独定义 `healthz` / `readyz` 路由。
 
-```bash
-curl -H "Authorization: Bearer dev-access-token" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"web-portal","type":"web"}' \
-  http://127.0.0.1:8080/admin/v1/apps/register
-```
+## 配置
 
-## 当前边界
+主要配置位于 `config/config.yaml`：
 
-- 数据暂时保存在进程内存中，用于打通 API 和模块边界。
-- AI、渠道适配、WebSocket、Webhook 投递为后续接入点。
-- 当前只保留网关入口，后续在 `gateway` 内拆分 `ingress` 和 `egress`。
+- `server`：gRPC、standalone 与遥测配置
+- `http`：HTTP 监听地址和端口
+- `log`：日志配置
+- `access`：开发 Token 与租户
+- `database`：MySQL DSN
+
+环境变量会在加载 YAML 后覆盖对应字段。
 
 ## 工程结构
 
 ```text
-cmd/                 # 启动入口、版本信息
-config/              # YAML 配置
-internal/cfg/        # 配置加载和环境变量注入
-internal/module/     # system 与 gateway 模块注册
-internal/module/gateway/internal/api/ # 网关 HTTP 控制层
-pkg/consts/          # 服务常量
+cmd/                          # 启动入口
+config/                       # 默认配置
+internal/cfg/                 # 配置加载和环境变量注入
+internal/module/              # 模块注册
+internal/module/<module>/internal/ # 模块私有 api、model、service
+internal/module/<module>/pkg/      # 模块对外最小能力
+pkg/consts/                   # 服务常量
 ```
