@@ -193,8 +193,20 @@ func (s *AppService) SetStatus(_ context.Context, principal Principal, id string
 }
 
 func (s *AppService) accessible(app *App, principal Principal) error {
+	if principal.HasKind(iampkg.PrincipalKindHuman) {
+		if !principal.HasScope(iampkg.ScopeGatewayAdmin) {
+			return forbidden("principal cannot manage business apps")
+		}
+		if app.TenantID == "" || app.TenantID != principal.TenantID {
+			return forbidden("app %s does not belong to staff tenant", app.AppKey)
+		}
+		return nil
+	}
 	if !principal.HasKind(iampkg.PrincipalKindBusiness) {
 		return forbidden("relay principal cannot access business channel")
+	}
+	if !principal.HasScope(iampkg.ScopeChannelAccess) || principal.AccountKey != app.AppKey {
+		return forbidden("channel credential cannot access app %s", app.AppKey)
 	}
 	if app.TenantID == "" || app.TenantID != principal.TenantID {
 		return forbidden("app %s does not belong to account tenant", app.AppKey)

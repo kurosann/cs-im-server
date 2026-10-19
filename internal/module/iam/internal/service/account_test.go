@@ -20,7 +20,7 @@ func setupAccountService(t *testing.T) *iamservice.AccountService {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	store.RegisterRelationDB("main", store.RelationStore{DB: db.DB, Closer: db})
-	if err := db.AutoMigrate(&iammodel.AccountToken{}); err != nil {
+	if err := db.AutoMigrate(&iammodel.AccountToken{}, &iammodel.ChannelCredential{}); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
 	return iamservice.NewAccountService("bootstrap-token", "tenant_1", "relay-token")

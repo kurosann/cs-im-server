@@ -20,17 +20,25 @@ func (m *Module) Init(_ context.Context) error {
 	bootstrapToken := "dev-access-token"
 	relayToken := "dev-relay-token"
 	tenantID := "dev-tenant"
+	adminEmail := "admin@cs-im.local"
+	adminPassword := "admin12345"
 	if config := cfg.GetConfig(); config != nil {
 		bootstrapToken = config.Access.AccountToken
 		relayToken = config.Access.RelayToken
 		tenantID = config.Access.TenantID
 	}
-	pkg.SetService(iamService.NewAccountService(bootstrapToken, tenantID, relayToken))
+	accountService := iamService.NewAccountService(bootstrapToken, tenantID, relayToken)
+	pkg.SetService(accountService)
+	pkg.SetStaffService(iamService.NewStaffService(accountService, adminEmail, adminPassword, tenantID))
 	return nil
 }
 
 func (m *Module) Model() []commonmodule.ModelRegInfo {
-	return []commonmodule.ModelRegInfo{commonmodule.NewModelRegInfo(&model.AccountToken{})}
+	return []commonmodule.ModelRegInfo{
+		commonmodule.NewModelRegInfo(&model.AccountToken{}),
+		commonmodule.NewModelRegInfo(&model.User{}),
+		commonmodule.NewModelRegInfo(&model.ChannelCredential{}),
+	}
 }
 
 func (m *Module) Api() []commonmodule.ApiRegInfo   { return nil }
@@ -38,13 +46,14 @@ func (m *Module) Job() []commonmodule.JobRegInfo   { return nil }
 func (m *Module) Task() []commonmodule.TaskRegInfo { return nil }
 func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	tokenAPI := api.NewTokenAPI(pkg.Service())
-	adminGroup := commonmodule.NewHttpRouteGroup("/admin/v1/iam").Compose(tokenAPI.AdminRoutes())
+	authAPI := api.NewAuthAPI(pkg.StaffService())
+	channelCredentialAPI := api.NewChannelCredentialAPI(pkg.Service())
+	staffAPI := api.NewStaffAPI(pkg.StaffService())
+	adminGroup := commonmodule.NewHttpRouteGroup("/admin/v1/iam", commonmodule.WithGroupMiddlewares(
+		pkg.AccountTokenMiddleware(),
+		pkg.RequirePrincipalScope(pkg.ScopeIAMTokenManage),
+	)).Compose(tokenAPI.AdminRoutes(), channelCredentialAPI.Routes(), staffAPI.Routes())
 	return commonmodule.HttpApiInfo{
-		Handlers: adminGroup.Handlers(),
-		Middlewares: []commonmodule.HttpMiddleware{
-			pkg.AccountTokenMiddleware(),
-			pkg.RequirePrincipalKind(pkg.PrincipalKindBusiness),
-			pkg.RequirePrincipalScope(pkg.ScopeIAMTokenManage),
-		},
+		Handlers: append(adminGroup.Handlers(), authAPI.Routes()...),
 	}
 }

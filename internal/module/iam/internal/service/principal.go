@@ -3,6 +3,7 @@ package service
 const (
 	PrincipalKindBusiness = "business"
 	PrincipalKindRelay    = "relay"
+	PrincipalKindHuman    = "human"
 )
 
 func (p Principal) HasScope(scope string) bool {

@@ -27,7 +27,7 @@ func setupRelayGRPC(t *testing.T) *RelayChannelGRPCAPI {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	store.RegisterRelationDB("main", store.RelationStore{DB: db.DB, Closer: db})
-	if err := db.AutoMigrate(&iampkg.AccountToken{}, &relayservice.Channel{}); err != nil {
+	if err := db.AutoMigrate(&iampkg.AccountToken{}, &iampkg.ChannelCredential{}, &relayservice.Channel{}); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
 	return NewRelayChannelGRPCAPI(

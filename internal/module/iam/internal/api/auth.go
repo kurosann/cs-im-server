@@ -1,0 +1,61 @@
+package api
+
+import (
+	"net/http"
+
+	"cs-im-server/internal/module/iam/internal/service"
+	pkg "cs-im-server/internal/module/iam/pkg"
+	"cs-im-server/pkg/httpapi"
+
+	commonmodule "vane-common/module"
+)
+
+type AuthAPI struct {
+	Staff *service.StaffService
+}
+
+func NewAuthAPI(staff *service.StaffService) *AuthAPI {
+	return &AuthAPI{Staff: staff}
+}
+
+func (a *AuthAPI) Routes() []commonmodule.HttpHandlerRegInfo {
+	auth := commonmodule.NewHttpRouteGroup("/api/v1/auth")
+	return []commonmodule.HttpHandlerRegInfo{
+		auth.Post("/login", a.Login),
+		auth.Post("/logout", a.Logout, commonmodule.WithMiddlewares(pkg.AccountTokenMiddleware(), pkg.RequirePrincipalKind(pkg.PrincipalKindHuman))),
+		auth.Get("/me", a.Me, commonmodule.WithMiddlewares(pkg.AccountTokenMiddleware(), pkg.RequirePrincipalKind(pkg.PrincipalKindHuman))),
+	}
+}
+
+func (a *AuthAPI) Login(ctx httpapi.Context) {
+	var req service.LoginRequest
+	if err := ctx.BindJSON(&req); err != nil {
+		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	result, err := a.Staff.Login(ctx.Context(), req)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", result)
+}
+
+func (a *AuthAPI) Logout(ctx httpapi.Context) {
+	principal, _ := pkg.PrincipalFromContext(ctx.Context())
+	if err := a.Staff.Logout(ctx.Context(), principal); err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", nil)
+}
+
+func (a *AuthAPI) Me(ctx httpapi.Context) {
+	principal, _ := pkg.PrincipalFromContext(ctx.Context())
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", map[string]any{
+		"userKey":  principal.AccountKey,
+		"tenantId": principal.TenantID,
+		"kind":     principal.Kind,
+		"scopes":   principal.Scopes,
+	})
+}

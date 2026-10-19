@@ -70,6 +70,10 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 
 	return commonmodule.HttpApiInfo{
 		Handlers:    adminGroup.Handlers(),
-		Middlewares: []commonmodule.HttpMiddleware{iampkg.AccountTokenMiddleware()},
+		Middlewares: []commonmodule.HttpMiddleware{
+			iampkg.AccountTokenMiddleware(),
+			iampkg.RequirePrincipalKind(iampkg.PrincipalKindHuman),
+			iampkg.RequirePrincipalScope(iampkg.ScopeGatewayAdmin),
+		},
 	}
 }

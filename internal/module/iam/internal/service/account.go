@@ -18,7 +18,9 @@ import (
 
 const (
 	ScopeAll            = "*"
+	ScopeGatewayAdmin   = "gateway:admin"
 	ScopeIAMTokenManage = "iam:token:manage"
+	ScopeIAMUserManage  = "iam:user:manage"
 	ScopeChannelAccess  = "channel:access"
 	ScopeRelayAccess    = "relay:access"
 )
@@ -28,6 +30,7 @@ type Principal struct {
 	TenantID   string
 	Kind       string
 	Scopes     []string
+	TokenKey   string
 }
 
 type PrincipalContextKey struct{}
@@ -36,6 +39,8 @@ var ErrPrincipalMissing = errors.New("principal is missing")
 
 type AccountService struct {
 	accessor          dataaccess.DataAccessor[*model.AccountToken]
+	credentials       dataaccess.DataAccessor[*model.ChannelCredential]
+	users             dataaccess.DataAccessor[*model.User]
 	bootstrapToken    string
 	relayToken        string
 	bootstrapTenantID string
@@ -66,6 +71,27 @@ type IssueAccountTokenRequest struct {
 type IssueAccountTokenResult struct {
 	Token  AccountTokenInfo `json:"token"`
 	Secret string           `json:"secret"`
+}
+
+type ChannelCredentialInfo struct {
+	AppID      string     `json:"appId"`
+	Name       string     `json:"name"`
+	TenantID   string     `json:"tenantId"`
+	Status     string     `json:"status"`
+	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
+	RevokedAt  *time.Time `json:"revokedAt,omitempty"`
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+}
+
+type IssueChannelCredentialRequest struct {
+	AppID     string     `json:"appId"`
+	Name      string     `json:"name"`
+	ExpiresAt *time.Time `json:"expiresAt"`
+}
+
+type IssueChannelCredentialResult struct {
+	Credential ChannelCredentialInfo `json:"credential"`
+	Secret     string                `json:"secret"`
 }
 
 func NewAccountService(bootstrapToken, tenantID string, relayToken ...string) *AccountService {
@@ -99,12 +125,34 @@ func (s *AccountService) Authenticate(_ context.Context, token string) (Principa
 	if token == "" {
 		return Principal{}, unauthorized("account token is required")
 	}
+	now := time.Now()
 	item, err := s.accessor.First(context.Background(), dataaccess.Eq("token_hash", hashToken(token)))
 	if err != nil && !errors.Is(err, dataaccess.ErrDataNotFound) {
 		return Principal{}, err
 	}
-	now := time.Now()
-	if err == nil {
+	credential, err := s.credentials.First(context.Background(), dataaccess.Eq("secret_hash", hashToken(token)))
+	if err != nil && !errors.Is(err, dataaccess.ErrDataNotFound) {
+		return Principal{}, err
+	}
+	if credential != nil {
+		if credential.Status != "active" {
+			return Principal{}, forbidden("channel credential is disabled or revoked")
+		}
+		if credential.ExpiresAt != nil && credential.ExpiresAt.Before(now) {
+			return Principal{}, forbidden("channel credential is expired")
+		}
+		credential.LastUsedAt = &now
+		if err := s.credentials.Update(context.Background(), credential); err != nil {
+			return Principal{}, err
+		}
+		return Principal{
+			AccountKey: credential.AppKey,
+			TenantID:   credential.TenantID,
+			Kind:       PrincipalKindBusiness,
+			Scopes:     []string{ScopeChannelAccess},
+		}, nil
+	}
+	if item != nil {
 		if item.Status != "active" {
 			return Principal{}, forbidden("account token is disabled or revoked")
 		}
@@ -123,7 +171,16 @@ func (s *AccountService) Authenticate(_ context.Context, token string) (Principa
 		if err := s.accessor.Update(context.Background(), item); err != nil {
 			return Principal{}, err
 		}
-		return Principal{AccountKey: item.AccountKey, TenantID: item.TenantID, Kind: kind, Scopes: scopes}, nil
+		if kind == PrincipalKindHuman {
+			return s.authenticateStaff(context.Background(), item)
+		}
+		return Principal{
+			AccountKey: item.AccountKey,
+			TenantID:   item.TenantID,
+			Kind:       kind,
+			Scopes:     scopes,
+			TokenKey:   item.TokenKey,
+		}, nil
 	}
 	if s.relayToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.relayToken)) == 1 {
 		return Principal{AccountKey: "relay-account", TenantID: s.bootstrapTenantID, Kind: PrincipalKindRelay, Scopes: []string{ScopeAll}}, nil
@@ -132,6 +189,26 @@ func (s *AccountService) Authenticate(_ context.Context, token string) (Principa
 		return Principal{}, unauthorized("invalid account token")
 	}
 	return Principal{AccountKey: "dev-account", TenantID: s.bootstrapTenantID, Kind: PrincipalKindBusiness, Scopes: []string{ScopeAll}}, nil
+}
+
+func (s *AccountService) authenticateStaff(ctx context.Context, item *model.AccountToken) (Principal, error) {
+	user, err := s.users.First(ctx, dataaccess.Eq("user_key", item.AccountKey), dataaccess.Eq("tenant_id", item.TenantID))
+	if errors.Is(err, dataaccess.ErrDataNotFound) {
+		return Principal{}, unauthorized("staff account is missing")
+	}
+	if err != nil {
+		return Principal{}, err
+	}
+	if user.Status != "active" {
+		return Principal{}, forbidden("staff account is disabled")
+	}
+	return Principal{
+		AccountKey: user.UserKey,
+		TenantID:   user.TenantID,
+		Kind:       PrincipalKindHuman,
+		Scopes:     roleScopes(user.Role),
+		TokenKey:   item.TokenKey,
+	}, nil
 }
 
 func (s *AccountService) Issue(ctx context.Context, principal Principal, req IssueAccountTokenRequest) (IssueAccountTokenResult, error) {
@@ -206,6 +283,9 @@ func (s *AccountService) List(ctx context.Context, principal Principal) ([]Accou
 	}
 	result := make([]AccountTokenInfo, 0, len(items))
 	for _, item := range items {
+		if item.Kind == PrincipalKindHuman {
+			continue
+		}
 		result = append(result, tokenInfo(item))
 	}
 	return result, nil

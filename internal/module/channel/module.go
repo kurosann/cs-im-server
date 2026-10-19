@@ -45,6 +45,10 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	routes := commonmodule.NewHttpRouteGroup("/api/v1").Compose(channelHTTP.Routes())
 	return commonmodule.HttpApiInfo{
 		Handlers:    routes.Handlers(),
-		Middlewares: []commonmodule.HttpMiddleware{iampkg.AccountTokenMiddleware()},
+		Middlewares: []commonmodule.HttpMiddleware{
+			iampkg.AccountTokenMiddleware(),
+			iampkg.RequirePrincipalKind(iampkg.PrincipalKindBusiness),
+			iampkg.RequirePrincipalScope(iampkg.ScopeChannelAccess),
+		},
 	}
 }

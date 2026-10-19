@@ -45,7 +45,7 @@ func setupChannelGateway(t *testing.T) channelGatewayFixture {
 	t.Cleanup(func() { _ = db.Close() })
 	store.RegisterRelationDB("main", store.RelationStore{DB: db.DB, Closer: db})
 	if err := db.AutoMigrate(
-		&iampkg.AccountToken{}, &gatewaypkg.App{}, &gatewaypkg.Customer{},
+		&iampkg.AccountToken{}, &iampkg.ChannelCredential{}, &gatewaypkg.App{}, &gatewaypkg.Customer{},
 		&gatewaypkg.Conversation{}, &gatewaypkg.Message{},
 	); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
@@ -63,12 +63,24 @@ func setupChannelGateway(t *testing.T) channelGatewayFixture {
 	if err != nil {
 		t.Fatalf("register app: %v", err)
 	}
+	accounts := iampkg.NewAccountService("bootstrap-token", "tenant_1")
+	credential, err := accounts.IssueChannelCredential(
+		context.Background(),
+		iampkg.Principal{
+			AccountKey: "staff_1", TenantID: "tenant_1",
+			Kind: iampkg.PrincipalKindHuman, Scopes: []string{iampkg.ScopeIAMTokenManage},
+		},
+		iampkg.IssueChannelCredentialRequest{AppID: app.AppKey, Name: "Test Channel"},
+	)
+	if err != nil {
+		t.Fatalf("issue channel credential: %v", err)
+	}
 	api := NewChannelGatewayGRPCAPI(
-		iampkg.NewAccountService("bootstrap-token", "tenant_1"),
+		accounts,
 		apps, conversations, messages, realtime,
 	)
 	tokenContext := metadata.NewIncomingContext(context.Background(), metadata.MD{
-		"authorization": []string{"Bearer bootstrap-token"},
+		"authorization": []string{"Bearer " + credential.Secret},
 	})
 	conversation, err := api.EnsureConversation(tokenContext, &gatewayv1.EnsureConversationRequest{
 		AppId: app.AppKey, CustomerExternalId: "customer-1", Channel: "web",

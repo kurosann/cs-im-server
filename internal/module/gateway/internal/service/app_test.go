@@ -39,9 +39,18 @@ func businessPrincipal(tenantID string) Principal {
 	}
 }
 
+func staffPrincipal(tenantID string) Principal {
+	return Principal{
+		AccountKey: "staff_" + tenantID,
+		TenantID:   tenantID,
+		Kind:       iampkg.PrincipalKindHuman,
+		Scopes:     []string{iampkg.ScopeGatewayAdmin},
+	}
+}
+
 func registerApp(t *testing.T, service *AppService, tenantID, serviceKey, name string) App {
 	t.Helper()
-	app, err := service.Register(context.Background(), businessPrincipal(tenantID), RegisterAppRequest{
+	app, err := service.Register(context.Background(), staffPrincipal(tenantID), RegisterAppRequest{
 		ServiceKey:  serviceKey,
 		DisplayName: name,
 	})
@@ -56,8 +65,8 @@ func TestAppServiceTenantBoundary(t *testing.T) {
 	tenant1App := registerApp(t, service, "tenant_1", "web", "官网客服")
 	tenant2App := registerApp(t, service, "tenant_2", "web", "小程序客服")
 
-	principal1 := businessPrincipal("tenant_1")
-	principal2 := businessPrincipal("tenant_2")
+	principal1 := staffPrincipal("tenant_1")
+	principal2 := staffPrincipal("tenant_2")
 
 	apps1 := service.List(context.Background(), principal1)
 	if len(apps1) != 1 || apps1[0].AppKey != tenant1App.AppKey {
@@ -76,5 +85,29 @@ func TestAppServiceTenantBoundary(t *testing.T) {
 	}
 	if _, err := service.SetStatus(context.Background(), principal1, tenant2App.AppKey, false); err == nil {
 		t.Fatal("SetStatus() allowed other tenant app")
+	}
+}
+
+func TestAppServiceRequiresChannelScope(t *testing.T) {
+	service := setupAppService(t)
+	app := registerApp(t, service, "tenant_1", "web", "官网客服")
+
+	missingScope := Principal{
+		AccountKey: "account_tenant_1",
+		TenantID:   "tenant_1",
+		Kind:       iampkg.PrincipalKindBusiness,
+	}
+	if err := service.AuthorizeAccount(app.AppKey, missingScope); err == nil {
+		t.Fatal("AuthorizeAccount() allowed principal without channel scope")
+	}
+
+	relay := Principal{
+		AccountKey: "relay_tenant_1",
+		TenantID:   "tenant_1",
+		Kind:       iampkg.PrincipalKindRelay,
+		Scopes:     []string{iampkg.ScopeAll},
+	}
+	if err := service.AuthorizeAccount(app.AppKey, relay); err == nil {
+		t.Fatal("AuthorizeAccount() allowed relay principal")
 	}
 }
