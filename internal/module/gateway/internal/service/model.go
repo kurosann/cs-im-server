@@ -16,6 +16,7 @@ type (
 	Message          = model.Message
 	MessageSender    = model.MessageSender
 	MessageSource    = model.MessageSource
+	MessageMedia     = model.MessageMedia
 	Principal        = iampkg.Principal
 	RelayService     = relaypkg.RelayService
 	Delivery         = relaypkg.Delivery

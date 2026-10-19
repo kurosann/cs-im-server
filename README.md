@@ -11,9 +11,13 @@ CS IM 聚合客服系统的后端服务。当前处于可联调阶段，提供�
 `iam` 只负责“谁在调用系统”，不承载业务规则。
 
 - 初始化业务访问 Token、转发渠道 Token 和默认租户。
-- 校验 Token，并把 `business`、`relay` 两类身份放入请求上下文。
-- 提供 `AccountTokenMiddleware` 和 `RequirePrincipalKind`，供各模块声明可访问的身份类型。
+- 校验 Token 的状态、过期时间和撤销标记，并把 `business`、`relay` 两类身份、租户和 scope 放入请求上下文。
+- 服务端随机生成动态 Token，数据库只保存 SHA-256 摘要；明文只在签发和轮换响应中返回一次。
+- 提供 Token 签发、查询、禁用、启用、轮换能力，默认 scope 分别限制为 `channel:access` 和 `relay:access`。
+- 提供 `AccountTokenMiddleware`、`RequirePrincipalKind` 和 `RequirePrincipalScope`，供各模块声明可访问的身份与权限。
 - 持久化 `AccountToken` 模型。
+
+管理路由挂在 `/admin/v1/iam/tokens` 下，要求 `business` 身份和 `iam:token:manage` scope。开发引导 Token 使用 `*`，仅用于初始化和联调，不要直接暴露给业务渠道。
 
 ### `gateway`：核心领域与数据所有权
 
@@ -21,6 +25,7 @@ CS IM 聚合客服系统的后端服务。当前处于可联调阶段，提供�
 
 - 管理业务 App、客户、会话和消息。
 - 维护消息序列、消息历史和实时事件发布/订阅。
+- 支持 `text`、`image`、`file`、`video` 消息；媒体只保存调用方提供的 URL 引用，不提供上传能力。
 - 对客服聚合系统提供 `/admin/v1` 管理接口。
 - 通过 `pkg/gateway.go` 暴露 `AppAuthorizer`、`ConversationIngress`、`MessageIngress`、`MessageEgress`、`RealtimeSubscriber` 等窄接口。
 
@@ -89,6 +94,15 @@ CS_IM_DB_DSN="user:password@tcp(host:port)/cs_im_dev?charset=utf8mb4&parseTime=t
 - 默认租户：`dev-tenant`
 
 Token 可通过 `CS_IM_ACCOUNT_TOKEN`、`CS_IM_RELAY_TOKEN`、`CS_IM_TENANT_ID` 覆盖。
+
+使用开发引导 Token 可签发最小权限 Token：
+
+```bash
+curl -X POST -H "Authorization: Bearer dev-access-token" \
+  -H "Content-Type: application/json" \
+  -d '{"accountKey":"app-account","name":"web app","kind":"business"}' \
+  http://127.0.0.1:8080/admin/v1/iam/tokens
+```
 
 ## 构建与测试
 

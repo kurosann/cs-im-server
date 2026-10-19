@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"net/url"
 	"sort"
 	"sync"
 	"time"
@@ -30,6 +31,7 @@ type CreateMessageRequest struct {
 	Source          MessageSource `json:"source"`
 	Type            string        `json:"type"`
 	Text            string        `json:"text"`
+	Content         *MessageMedia `json:"content"`
 }
 
 type UpdateMessageStatusRequest struct {
@@ -47,6 +49,34 @@ type MessageHistoryPage struct {
 
 var messageStatuses = map[string]bool{
 	"received": true, "sent": true, "delivered": true, "read": true, "failed": true,
+}
+
+var supportedMessageTypes = map[string]bool{"text": true, "image": true, "file": true, "video": true}
+
+func validateMessage(req *CreateMessageRequest) error {
+	if req.Type == "" {
+		req.Type = "text"
+	}
+	if !supportedMessageTypes[req.Type] {
+		return badRequest("unsupported message type %s", req.Type)
+	}
+	if req.Type == "text" {
+		if req.Text == "" {
+			return badRequest("text is required")
+		}
+		if req.Content != nil {
+			return badRequest("content is not allowed for text messages")
+		}
+		return nil
+	}
+	if req.Content == nil || req.Content.URL == "" {
+		return badRequest("content.url is required")
+	}
+	parsed, err := url.Parse(req.Content.URL)
+	if err != nil || parsed.Scheme != "http" && parsed.Scheme != "https" || parsed.Host == "" {
+		return badRequest("content.url must be an absolute http or https URL")
+	}
+	return nil
 }
 
 func NewMessageService(apps *AppService, conversations *ConversationService, realtime *RealtimeService) *MessageService {
@@ -78,8 +108,8 @@ func (s *MessageService) Create(_ context.Context, req CreateMessageRequest) (Me
 	if req.Type == "" {
 		req.Type = "text"
 	}
-	if req.Type == "text" && req.Text == "" {
-		return Message{}, badRequest("text is required")
+	if err := validateMessage(&req); err != nil {
+		return Message{}, err
 	}
 	conversation, err := s.conversations.Get(context.Background(), req.ConversationKey)
 	if err != nil {
@@ -111,7 +141,7 @@ func (s *MessageService) Create(_ context.Context, req CreateMessageRequest) (Me
 	message := &Message{
 		MessageKey: "msg_" + idutil.GenShortId(), Seq: seq, ConversationKey: conversation.ConversationKey, CustomerKey: conversation.CustomerKey,
 		SenderRole: req.Sender.Role, SenderID: req.Sender.ID, SourceAppKey: req.Source.AppID, SourceExternalID: req.Source.ExternalID,
-		SourceSentAt: req.Source.SentAt, SourceDedupKey: sourceKeyPtr, Type: req.Type, Text: req.Text, Status: "received",
+		SourceSentAt: req.Source.SentAt, SourceDedupKey: sourceKeyPtr, Type: req.Type, Text: req.Text, Media: req.Content, Status: "received",
 	}
 	if err := s.accessor.Save(context.Background(), message); err != nil {
 		return Message{}, err

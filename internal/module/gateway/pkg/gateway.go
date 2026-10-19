@@ -24,6 +24,7 @@ type (
 	Message                    = model.Message
 	MessageSender              = model.MessageSender
 	MessageSource              = model.MessageSource
+	MessageMedia               = model.MessageMedia
 	CreateMessageRequest       = service.CreateMessageRequest
 	UpdateMessageStatusRequest = service.UpdateMessageStatusRequest
 	MessageHistoryFilter       = service.MessageHistoryFilter

@@ -49,6 +49,40 @@ func conversationFromService(item gatewaypkg.Conversation, created bool) *gatewa
 	}
 }
 
+func contentFromService(item *gatewaypkg.MessageMedia) *gatewayv1.MessageContent {
+	if item == nil {
+		return nil
+	}
+	return &gatewayv1.MessageContent{
+		Url:             item.URL,
+		MimeType:        item.MimeType,
+		FileName:        item.FileName,
+		Size:            item.Size,
+		Width:           int32(item.Width),
+		Height:          int32(item.Height),
+		DurationSeconds: int32(item.DurationSeconds),
+		ThumbnailUrl:    item.ThumbnailURL,
+		Checksum:        item.Checksum,
+	}
+}
+
+func contentFromRequest(item *gatewayv1.MessageContent) *gatewaypkg.MessageMedia {
+	if item == nil {
+		return nil
+	}
+	return &gatewaypkg.MessageMedia{
+		URL:             item.Url,
+		MimeType:        item.MimeType,
+		FileName:        item.FileName,
+		Size:            item.Size,
+		Width:           int(item.Width),
+		Height:          int(item.Height),
+		DurationSeconds: int(item.DurationSeconds),
+		ThumbnailURL:    item.ThumbnailUrl,
+		Checksum:        item.Checksum,
+	}
+}
+
 func (a *ChannelGatewayGRPCAPI) EnsureConversation(ctx context.Context, req *gatewayv1.EnsureConversationRequest) (*gatewayv1.ConversationResponse, error) {
 	if err := a.authorize(ctx, req.AppId); err != nil {
 		return nil, err
@@ -82,6 +116,7 @@ func (a *ChannelGatewayGRPCAPI) messageFromService(item gatewaypkg.Message) *gat
 		Source:         source,
 		Type:           item.Type,
 		Text:           item.Text,
+		Content:        contentFromService(item.Media),
 		Status:         item.Status,
 		ReceivedAt:     item.BaseModel.CreateAt.Format(time.RFC3339Nano),
 		CreatedAt:      item.CreatedAt().Format(time.RFC3339Nano),
@@ -99,6 +134,7 @@ func (a *ChannelGatewayGRPCAPI) SendMessage(ctx context.Context, req *gatewayv1.
 		Sender:          gatewaypkg.MessageSender{Role: req.Sender.GetRole(), ID: req.Sender.GetId()},
 		Type:            req.Type,
 		Text:            req.Text,
+		Content:         contentFromRequest(req.Content),
 	}
 	if req.Source != nil {
 		request.Source = gatewaypkg.MessageSource{AppID: req.Source.AppId, ExternalID: req.Source.ExternalId}

@@ -44,12 +44,22 @@ func (a *AppAPI) Register(ctx httpapi.Context) {
 }
 
 func (a *AppAPI) List(ctx httpapi.Context) {
-	apps := a.Service.List(ctx.Context())
+	principal, ok := iampkg.PrincipalFromContext(ctx.Context())
+	if !ok {
+		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
+		return
+	}
+	apps := a.Service.List(ctx.Context(), principal)
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", apps)
 }
 
 func (a *AppAPI) Get(ctx httpapi.Context) {
-	app, err := a.Service.Get(ctx.Context(), ctx.Param("id"))
+	principal, ok := iampkg.PrincipalFromContext(ctx.Context())
+	if !ok {
+		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
+		return
+	}
+	app, err := a.Service.GetAuthorized(ctx.Context(), principal, ctx.Param("id"))
 	if err != nil {
 		writeServiceError(ctx, err)
 		return
@@ -58,12 +68,17 @@ func (a *AppAPI) Get(ctx httpapi.Context) {
 }
 
 func (a *AppAPI) Heartbeat(ctx httpapi.Context) {
+	principal, ok := iampkg.PrincipalFromContext(ctx.Context())
+	if !ok {
+		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
+		return
+	}
 	var req service.HeartbeatRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
 	}
-	app, err := a.Service.Heartbeat(ctx.Context(), req)
+	app, err := a.Service.Heartbeat(ctx.Context(), principal, req)
 	if err != nil {
 		writeServiceError(ctx, err)
 		return
@@ -72,7 +87,12 @@ func (a *AppAPI) Heartbeat(ctx httpapi.Context) {
 }
 
 func (a *AppAPI) Enable(ctx httpapi.Context) {
-	app, err := a.Service.SetStatus(ctx.Context(), ctx.Param("id"), true)
+	principal, ok := iampkg.PrincipalFromContext(ctx.Context())
+	if !ok {
+		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
+		return
+	}
+	app, err := a.Service.SetStatus(ctx.Context(), principal, ctx.Param("id"), true)
 	if err != nil {
 		writeServiceError(ctx, err)
 		return
@@ -81,7 +101,12 @@ func (a *AppAPI) Enable(ctx httpapi.Context) {
 }
 
 func (a *AppAPI) Disable(ctx httpapi.Context) {
-	app, err := a.Service.SetStatus(ctx.Context(), ctx.Param("id"), false)
+	principal, ok := iampkg.PrincipalFromContext(ctx.Context())
+	if !ok {
+		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
+		return
+	}
+	app, err := a.Service.SetStatus(ctx.Context(), principal, ctx.Param("id"), false)
 	if err != nil {
 		writeServiceError(ctx, err)
 		return

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"cs-im-server/internal/cfg"
+	"cs-im-server/internal/module/iam/internal/api"
 	"cs-im-server/internal/module/iam/internal/model"
 	iamService "cs-im-server/internal/module/iam/internal/service"
 	pkg "cs-im-server/internal/module/iam/pkg"
@@ -32,7 +33,18 @@ func (m *Module) Model() []commonmodule.ModelRegInfo {
 	return []commonmodule.ModelRegInfo{commonmodule.NewModelRegInfo(&model.AccountToken{})}
 }
 
-func (m *Module) Api() []commonmodule.ApiRegInfo    { return nil }
-func (m *Module) Job() []commonmodule.JobRegInfo    { return nil }
-func (m *Module) Task() []commonmodule.TaskRegInfo  { return nil }
-func (m *Module) HttpApi() commonmodule.HttpApiInfo { return commonmodule.HttpApiInfo{} }
+func (m *Module) Api() []commonmodule.ApiRegInfo   { return nil }
+func (m *Module) Job() []commonmodule.JobRegInfo   { return nil }
+func (m *Module) Task() []commonmodule.TaskRegInfo { return nil }
+func (m *Module) HttpApi() commonmodule.HttpApiInfo {
+	tokenAPI := api.NewTokenAPI(pkg.Service())
+	adminGroup := commonmodule.NewHttpRouteGroup("/admin/v1/iam").Compose(tokenAPI.AdminRoutes())
+	return commonmodule.HttpApiInfo{
+		Handlers: adminGroup.Handlers(),
+		Middlewares: []commonmodule.HttpMiddleware{
+			pkg.AccountTokenMiddleware(),
+			pkg.RequirePrincipalKind(pkg.PrincipalKindBusiness),
+			pkg.RequirePrincipalScope(pkg.ScopeIAMTokenManage),
+		},
+	}
+}

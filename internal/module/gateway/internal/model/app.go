@@ -16,8 +16,8 @@ var _ damodel.Table = (*App)(nil)
 type App struct {
 	base.BaseModel
 	AppKey           string     `gorm:"column:app_key;size:64;uniqueIndex" json:"appId"`
-	TenantID         string     `gorm:"column:tenant_id;size:64;not null;index" json:"tenantId"`
-	ServiceKey       string     `gorm:"column:service_key;size:255;uniqueIndex" json:"serviceKey"`
+	TenantID         string     `gorm:"column:tenant_id;size:64;not null;uniqueIndex:idx_apps_tenant_service_key;index" json:"tenantId"`
+	ServiceKey       string     `gorm:"column:service_key;size:255;not null;uniqueIndex:idx_apps_tenant_service_key" json:"serviceKey"`
 	DisplayName      string     `gorm:"column:display_name;size:255;not null" json:"displayName"`
 	Kind             string     `gorm:"column:kind;size:64" json:"kind"`
 	Version          string     `gorm:"column:version;size:64" json:"version,omitempty"`

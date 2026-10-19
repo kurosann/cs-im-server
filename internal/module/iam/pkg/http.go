@@ -43,3 +43,19 @@ func RequirePrincipalKind(kind string) commonmodule.HttpMiddleware {
 		}
 	}
 }
+
+func RequirePrincipalScope(scope string) commonmodule.HttpMiddleware {
+	return func(next commonmodule.HttpHandler) commonmodule.HttpHandler {
+		return func(ctx commonmodule.HttpReqContext) {
+			principal, ok := PrincipalFromContext(ctx.Context())
+			if !ok || !principal.HasScope(scope) {
+				_ = ctx.JSON(http.StatusForbidden, map[string]any{
+					"code":    "FORBIDDEN",
+					"message": "principal scope is not allowed",
+				})
+				return
+			}
+			next(ctx)
+		}
+	}
+}

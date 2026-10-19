@@ -192,3 +192,58 @@ func TestChannelGatewayStreamFiltersCustomerMessages(t *testing.T) {
 	}
 	t.Fatal("StreamMessages() timed out")
 }
+
+func TestChannelGatewayMediaMessage(t *testing.T) {
+	fixture := setupChannelGateway(t)
+	ctx := fixture.tokenCtx
+	conversation, err := fixture.api.EnsureConversation(ctx, &gatewayv1.EnsureConversationRequest{
+		AppId: fixture.appID, CustomerExternalId: "customer-1", Channel: "web",
+	})
+	if err != nil {
+		t.Fatalf("EnsureConversation() error = %v", err)
+	}
+	sentAt := time.Now().UTC().Format(time.RFC3339Nano)
+	content := &gatewayv1.MessageContent{
+		Url: "https://cdn.example.com/photo.png", MimeType: "image/png",
+		FileName: "photo.png", Size: 1024, Width: 640, Height: 480,
+	}
+
+	_, err = fixture.api.SendMessage(ctx, &gatewayv1.SendMessageRequest{
+		AppId: fixture.appID, ConversationId: fixture.conversationID,
+		CustomerId: conversation.CustomerId,
+		Sender:     &gatewayv1.MessageSender{Role: "customer", Id: "cus_1"},
+		Type:       "image", Content: content,
+		Source: &gatewayv1.MessageSource{
+			AppId: fixture.appID, ExternalId: "media-1", SentAt: sentAt,
+		},
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("SendMessage(mismatched customer) error = %v, want InvalidArgument", err)
+	}
+
+	message, err := fixture.api.SendMessage(ctx, &gatewayv1.SendMessageRequest{
+		AppId: fixture.appID, ConversationId: fixture.conversationID,
+		CustomerId: conversation.CustomerId,
+		Sender:     &gatewayv1.MessageSender{Role: "customer", Id: conversation.CustomerId},
+		Type:       "image", Content: content,
+		Source: &gatewayv1.MessageSource{
+			AppId: fixture.appID, ExternalId: "media-1", SentAt: sentAt,
+		},
+	})
+	if err != nil {
+		t.Fatalf("SendMessage(image) error = %v", err)
+	}
+	if message.Message.Content == nil || message.Message.Content.Url != content.Url || message.Message.Content.FileName != content.FileName {
+		t.Fatalf("SendMessage(image) content = %+v", message.Message.Content)
+	}
+
+	page, err := fixture.api.ListMessages(ctx, &gatewayv1.ListMessagesRequest{
+		AppId: fixture.appID, ConversationId: fixture.conversationID, Order: "asc",
+	})
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Content == nil || page.Items[0].Content.Url != content.Url {
+		t.Fatalf("ListMessages() media content = %+v", page.Items[0].Content)
+	}
+}

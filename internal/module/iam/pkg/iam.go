@@ -9,16 +9,22 @@ import (
 )
 
 type (
-	Principal           = service.Principal
-	PrincipalContextKey = service.PrincipalContextKey
-	AccountService      = service.AccountService
-	AccountTokenInfo    = service.AccountTokenInfo
-	AccountToken        = model.AccountToken
+	Principal                = service.Principal
+	PrincipalContextKey      = service.PrincipalContextKey
+	AccountService           = service.AccountService
+	AccountTokenInfo         = service.AccountTokenInfo
+	IssueAccountTokenRequest = service.IssueAccountTokenRequest
+	IssueAccountTokenResult  = service.IssueAccountTokenResult
+	AccountToken             = model.AccountToken
 )
 
 const (
 	PrincipalKindBusiness = service.PrincipalKindBusiness
 	PrincipalKindRelay    = service.PrincipalKindRelay
+	ScopeAll              = service.ScopeAll
+	ScopeIAMTokenManage   = service.ScopeIAMTokenManage
+	ScopeChannelAccess    = service.ScopeChannelAccess
+	ScopeRelayAccess      = service.ScopeRelayAccess
 )
 
 var ErrPrincipalMissing = service.ErrPrincipalMissing

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"gorm.io/gorm"
+
 	"vane-common/pkg/dataaccess/base"
 	"vane-common/pkg/dataaccess/field"
 	damodel "vane-common/pkg/dataaccess/model"
@@ -13,19 +15,21 @@ var _ damodel.Table = (*Message)(nil)
 
 type Message struct {
 	base.BaseModel
-	MessageKey       string     `gorm:"column:message_key;size:64;uniqueIndex" json:"messageId"`
-	Seq              int64      `gorm:"column:seq;not null;default:0" json:"seq"`
-	ConversationKey  string     `gorm:"column:conversation_key;size:64;not null;index:idx_msg_conv" json:"conversationId"`
-	CustomerKey      string     `gorm:"column:customer_key;size:64;not null" json:"customerId"`
-	SenderRole       string     `gorm:"column:sender_role;size:32;not null" json:"-"`
-	SenderID         string     `gorm:"column:sender_id;size:64;not null" json:"-"`
-	SourceAppKey     string     `gorm:"column:source_app_key;size:64" json:"-"`
-	SourceExternalID string     `gorm:"column:source_external_id;size:255" json:"-"`
-	SourceSentAt     *time.Time `gorm:"column:source_sent_at" json:"-"`
-	SourceDedupKey   *string    `gorm:"column:source_dedup_key;size:384;uniqueIndex" json:"-"`
-	Type             string     `gorm:"column:type;size:32;not null;default:text" json:"type"`
-	Text             string     `gorm:"column:text;type:text" json:"text,omitempty"`
-	Status           string     `gorm:"column:status;size:32;not null;default:received" json:"status"`
+	MessageKey       string        `gorm:"column:message_key;size:64;uniqueIndex" json:"messageId"`
+	Seq              int64         `gorm:"column:seq;not null;default:0" json:"seq"`
+	ConversationKey  string        `gorm:"column:conversation_key;size:64;not null;index:idx_msg_conv" json:"conversationId"`
+	CustomerKey      string        `gorm:"column:customer_key;size:64;not null" json:"customerId"`
+	SenderRole       string        `gorm:"column:sender_role;size:32;not null" json:"-"`
+	SenderID         string        `gorm:"column:sender_id;size:64;not null" json:"-"`
+	SourceAppKey     string        `gorm:"column:source_app_key;size:64" json:"-"`
+	SourceExternalID string        `gorm:"column:source_external_id;size:255" json:"-"`
+	SourceSentAt     *time.Time    `gorm:"column:source_sent_at" json:"-"`
+	SourceDedupKey   *string       `gorm:"column:source_dedup_key;size:384;uniqueIndex" json:"-"`
+	Type             string        `gorm:"column:type;size:32;not null;default:text" json:"type"`
+	Text             string        `gorm:"column:text;type:text" json:"text,omitempty"`
+	Media            *MessageMedia `gorm:"-" json:"content,omitempty"`
+	MediaJSON        string        `gorm:"column:media;type:json" json:"-"`
+	Status           string        `gorm:"column:status;size:32;not null;default:received" json:"status"`
 }
 
 func (*Message) TableName() string { return "messages" }
@@ -35,6 +39,28 @@ func (m *Message) SetID(id field.IID) { m.BaseModel.SetID(id) }
 func (m *Message) IDColumn() string   { return m.BaseModel.IDColumn() }
 func (m *Message) Create()            { m.BaseModel.Create() }
 func (m *Message) Update()            { m.BaseModel.Update() }
+
+func (m *Message) BeforeSave(*gorm.DB) error {
+	if m.Media == nil {
+		m.MediaJSON = ""
+		return nil
+	}
+	data, err := json.Marshal(m.Media)
+	if err != nil {
+		return err
+	}
+	m.MediaJSON = string(data)
+	return nil
+}
+
+func (m *Message) AfterFind(*gorm.DB) error {
+	if m.MediaJSON == "" {
+		m.Media = nil
+		return nil
+	}
+	m.Media = &MessageMedia{}
+	return json.Unmarshal([]byte(m.MediaJSON), m.Media)
+}
 
 func (m Message) MarshalJSON() ([]byte, error) {
 	var source *MessageSource
@@ -50,6 +76,7 @@ func (m Message) MarshalJSON() ([]byte, error) {
 		Source          *MessageSource `json:"source,omitempty"`
 		Type            string         `json:"type"`
 		Text            string         `json:"text,omitempty"`
+		Content         *MessageMedia  `json:"content,omitempty"`
 		Status          string         `json:"status"`
 		ReceivedAt      string         `json:"receivedAt"`
 		CreatedAt       string         `json:"createdAt"`
@@ -63,6 +90,7 @@ func (m Message) MarshalJSON() ([]byte, error) {
 		Source:          source,
 		Type:            m.Type,
 		Text:            m.Text,
+		Content:         m.Media,
 		Status:          m.Status,
 		ReceivedAt:      m.BaseModel.CreateAt.Format(time.RFC3339Nano),
 		CreatedAt:       m.CreatedAt().Format(time.RFC3339Nano),
@@ -87,6 +115,7 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 		Source          *MessageSource `json:"source,omitempty"`
 		Type            string         `json:"type"`
 		Text            string         `json:"text,omitempty"`
+		Content         *MessageMedia  `json:"content,omitempty"`
 		Status          string         `json:"status"`
 	}
 	if err := json.Unmarshal(data, &v); err != nil {
@@ -105,6 +134,7 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	}
 	m.Type = v.Type
 	m.Text = v.Text
+	m.Media = v.Content
 	m.Status = v.Status
 	return nil
 }
@@ -118,4 +148,16 @@ type MessageSource struct {
 	AppID      string     `json:"appId,omitempty"`
 	ExternalID string     `json:"externalId,omitempty"`
 	SentAt     *time.Time `json:"sentAt,omitempty"`
+}
+
+type MessageMedia struct {
+	URL             string `json:"url"`
+	MimeType        string `json:"mimeType,omitempty"`
+	FileName        string `json:"fileName,omitempty"`
+	Size            int64  `json:"size,omitempty"`
+	Width           int    `json:"width,omitempty"`
+	Height          int    `json:"height,omitempty"`
+	DurationSeconds int    `json:"duration,omitempty"`
+	ThumbnailURL    string `json:"thumbnailUrl,omitempty"`
+	Checksum        string `json:"checksum,omitempty"`
 }

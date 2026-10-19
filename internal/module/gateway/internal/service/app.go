@@ -57,7 +57,7 @@ func (s *AppService) Register(_ context.Context, principal Principal, req Regist
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if appID, ok := s.idsByService[req.ServiceKey]; ok {
+	if appID, ok := s.idsByService[serviceKeyLookupKey(principal.TenantID, req.ServiceKey)]; ok {
 		app := s.apps[appID]
 		app.DisplayName = req.DisplayName
 		app.Kind = req.Kind
@@ -89,17 +89,20 @@ func (s *AppService) Register(_ context.Context, principal Principal, req Regist
 		return App{}, err
 	}
 	s.apps[app.AppKey] = app
-	s.idsByService[req.ServiceKey] = app.AppKey
+	s.idsByService[serviceKeyLookupKey(app.TenantID, req.ServiceKey)] = app.AppKey
 	result := *app
 	s.realtime.Publish("app.registered", id, result)
 	return result, nil
 }
 
-func (s *AppService) List(_ context.Context) []App {
+func (s *AppService) List(_ context.Context, principal Principal) []App {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	apps := make([]App, 0, len(s.apps))
 	for _, app := range s.apps {
+		if s.accessible(app, principal) != nil {
+			continue
+		}
 		apps = append(apps, *app)
 	}
 	sort.Slice(apps, func(i, j int) bool { return apps[i].CreateAt.Before(apps[j].CreateAt) })
@@ -116,7 +119,18 @@ func (s *AppService) Get(_ context.Context, id string) (App, error) {
 	return *app, nil
 }
 
-func (s *AppService) Heartbeat(_ context.Context, req HeartbeatRequest) (App, error) {
+func (s *AppService) GetAuthorized(_ context.Context, principal Principal, id string) (App, error) {
+	app, err := s.Get(context.Background(), id)
+	if err != nil {
+		return App{}, err
+	}
+	if err := s.accessible(&app, principal); err != nil {
+		return App{}, err
+	}
+	return app, nil
+}
+
+func (s *AppService) Heartbeat(_ context.Context, principal Principal, req HeartbeatRequest) (App, error) {
 	if req.AppID == "" {
 		return App{}, badRequest("appId is required")
 	}
@@ -126,6 +140,9 @@ func (s *AppService) Heartbeat(_ context.Context, req HeartbeatRequest) (App, er
 	app, ok := s.apps[req.AppID]
 	if !ok {
 		return App{}, notFound("app %s not found", req.AppID)
+	}
+	if err := s.accessible(app, principal); err != nil {
+		return App{}, err
 	}
 	ttl := app.LeaseTTLSeconds
 	if req.TTLSeconds > 0 {
@@ -150,7 +167,7 @@ func (s *AppService) Heartbeat(_ context.Context, req HeartbeatRequest) (App, er
 	return result, nil
 }
 
-func (s *AppService) SetStatus(_ context.Context, id string, enabled bool) (App, error) {
+func (s *AppService) SetStatus(_ context.Context, principal Principal, id string, enabled bool) (App, error) {
 	now := time.Now().UTC()
 	status := "disabled"
 	if enabled {
@@ -162,6 +179,9 @@ func (s *AppService) SetStatus(_ context.Context, id string, enabled bool) (App,
 	if !ok {
 		return App{}, notFound("app %s not found", id)
 	}
+	if err := s.accessible(app, principal); err != nil {
+		return App{}, err
+	}
 	app.Status = status
 	app.UpdateAt = now
 	if err := s.accessor.Save(context.Background(), app); err != nil {
@@ -170,6 +190,16 @@ func (s *AppService) SetStatus(_ context.Context, id string, enabled bool) (App,
 	result := *app
 	s.realtime.Publish("app.status_changed", id, result)
 	return result, nil
+}
+
+func (s *AppService) accessible(app *App, principal Principal) error {
+	if !principal.HasKind(iampkg.PrincipalKindBusiness) {
+		return forbidden("relay principal cannot access business channel")
+	}
+	if app.TenantID == "" || app.TenantID != principal.TenantID {
+		return forbidden("app %s does not belong to account tenant", app.AppKey)
+	}
+	return nil
 }
 
 func (s *AppService) AuthorizeAccount(appID string, principal Principal) error {
@@ -185,11 +215,8 @@ func (s *AppService) AuthorizeAccount(appID string, principal Principal) error {
 	if app.Status != "active" {
 		return forbidden("app %s is disabled", appID)
 	}
-	if app.TenantID == "" || app.TenantID != principal.TenantID {
-		return forbidden("app %s does not belong to account tenant", appID)
-	}
-	if !principal.HasKind(iampkg.PrincipalKindBusiness) {
-		return forbidden("relay principal cannot access business channel")
+	if err := s.accessible(app, principal); err != nil {
+		return err
 	}
 	return nil
 }
@@ -203,7 +230,11 @@ func (s *AppService) Load() error {
 	}
 	for _, item := range items {
 		s.apps[item.AppKey] = item
-		s.idsByService[item.ServiceKey] = item.AppKey
+		s.idsByService[serviceKeyLookupKey(item.TenantID, item.ServiceKey)] = item.AppKey
 	}
 	return nil
+}
+
+func serviceKeyLookupKey(tenantID, serviceKey string) string {
+	return tenantID + "\x00" + serviceKey
 }
