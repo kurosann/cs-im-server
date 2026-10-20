@@ -7,6 +7,8 @@ import (
 
 	"vane-common/pkg/dataaccess"
 	"vane-common/pkg/idutil"
+
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 )
 
 type CustomerService struct {
@@ -15,30 +17,6 @@ type CustomerService struct {
 	customers     map[string]*Customer
 	realtime      *RealtimeService
 	conversations ConversationRetargeter
-}
-
-type CreateCustomerRequest struct {
-	Name         string `json:"name"`
-	Channel      string `json:"channel"`
-	IdentityType string `json:"identityType"`
-	ExternalID   string `json:"externalId"`
-	DisplayName  string `json:"displayName"`
-}
-
-type AddIdentityRequest struct {
-	Type        string `json:"type"`
-	ExternalID  string `json:"externalId"`
-	DisplayName string `json:"displayName"`
-}
-
-type MergeCustomerRequest struct {
-	SourceCustomerID string `json:"sourceCustomerId"`
-}
-
-type EnsureExternalCustomerRequest struct {
-	ExternalID  string `json:"externalId"`
-	DisplayName string `json:"displayName"`
-	Channel     string `json:"channel"`
 }
 
 func NewCustomerService(realtime *RealtimeService) *CustomerService {
@@ -52,7 +30,7 @@ func (s *CustomerService) SetConversations(conversations ConversationRetargeter)
 	s.conversations = conversations
 }
 
-func (s *CustomerService) EnsureExternal(_ context.Context, appID string, req EnsureExternalCustomerRequest) (Customer, error) {
+func (s *CustomerService) EnsureExternal(_ context.Context, appID string, req gatewaydto.EnsureExternalCustomerRequest) (Customer, error) {
 	if req.ExternalID == "" {
 		return Customer{}, badRequest("customerExternalId is required")
 	}
@@ -93,7 +71,7 @@ func (s *CustomerService) EnsureExternal(_ context.Context, appID string, req En
 	return result, nil
 }
 
-func (s *CustomerService) Create(_ context.Context, req CreateCustomerRequest) (Customer, error) {
+func (s *CustomerService) Create(_ context.Context, req gatewaydto.CreateCustomerRequest) (Customer, error) {
 	if req.Name == "" {
 		return Customer{}, badRequest("name is required")
 	}
@@ -132,7 +110,7 @@ func (s *CustomerService) Get(_ context.Context, id string) (Customer, error) {
 	return *customer, nil
 }
 
-func (s *CustomerService) AddIdentity(_ context.Context, customerID string, req AddIdentityRequest) (Customer, error) {
+func (s *CustomerService) AddIdentity(_ context.Context, customerID string, req gatewaydto.AddIdentityRequest) (Customer, error) {
 	if req.Type == "" {
 		return Customer{}, badRequest("type is required")
 	}
@@ -161,7 +139,7 @@ func (s *CustomerService) AddIdentity(_ context.Context, customerID string, req 
 	return result, nil
 }
 
-func (s *CustomerService) Merge(_ context.Context, targetID string, req MergeCustomerRequest) (Customer, error) {
+func (s *CustomerService) Merge(_ context.Context, targetID string, req gatewaydto.MergeCustomerRequest) (Customer, error) {
 	if req.SourceCustomerID == "" {
 		return Customer{}, badRequest("sourceCustomerId is required")
 	}

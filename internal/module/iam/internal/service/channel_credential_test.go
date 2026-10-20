@@ -2,24 +2,26 @@ package service_test
 
 import (
 	"context"
+	iamdto "cs-im-server/internal/module/iam/dto"
+	iamprincipal "cs-im-server/internal/module/iam/pkg/principal"
 	"testing"
 	"time"
 
 	iamservice "cs-im-server/internal/module/iam/internal/service"
 )
 
-func staffIAMPrincipal() iamservice.Principal {
-	return iamservice.Principal{
+func staffIAMPrincipal() iamprincipal.Principal {
+	return iamprincipal.Principal{
 		AccountKey: "staff_1",
 		TenantID:   "tenant_1",
-		Kind:       iamservice.PrincipalKindHuman,
+		Kind:       iamprincipal.KindHuman,
 		Scopes:     []string{iamservice.ScopeIAMTokenManage},
 	}
 }
 
 func TestChannelCredentialLifecycle(t *testing.T) {
 	service := setupAccountService(t)
-	issued, err := service.IssueChannelCredential(context.Background(), staffIAMPrincipal(), iamservice.IssueChannelCredentialRequest{
+	issued, err := service.IssueChannelCredential(context.Background(), staffIAMPrincipal(), iamdto.IssueChannelCredentialRequest{
 		AppID: "app_test", Name: "官网客服接入",
 	})
 	if err != nil {
@@ -30,7 +32,7 @@ func TestChannelCredentialLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Authenticate() error = %v", err)
 	}
-	if principal.AccountKey != "app_test" || principal.TenantID != "tenant_1" || principal.Kind != iamservice.PrincipalKindBusiness || !principal.HasScope(iamservice.ScopeChannelAccess) {
+	if principal.AccountKey != "app_test" || principal.TenantID != "tenant_1" || principal.Kind != iamprincipal.KindBusiness || !principal.HasScope(iamservice.ScopeChannelAccess) {
 		t.Fatalf("Authenticate() = %+v", principal)
 	}
 
@@ -60,7 +62,7 @@ func TestChannelCredentialLifecycle(t *testing.T) {
 func TestChannelCredentialExpiry(t *testing.T) {
 	service := setupAccountService(t)
 	expiresAt := time.Now().Add(-time.Minute)
-	issued, err := service.IssueChannelCredential(context.Background(), staffIAMPrincipal(), iamservice.IssueChannelCredentialRequest{
+	issued, err := service.IssueChannelCredential(context.Background(), staffIAMPrincipal(), iamdto.IssueChannelCredentialRequest{
 		AppID: "app_expired", Name: "过期渠道", ExpiresAt: &expiresAt,
 	})
 	if err != nil {

@@ -3,6 +3,7 @@ package relay
 import "sync"
 
 import (
+	relaydto "cs-im-server/internal/module/relay/dto"
 	model "cs-im-server/internal/module/relay/internal/model"
 	service "cs-im-server/internal/module/relay/internal/service"
 )
@@ -14,10 +15,10 @@ type (
 	AIExecution          = model.AIExecution
 	Delivery             = model.Delivery
 	RelayService         = service.RelayService
-	CreateChannelRequest = service.CreateChannelRequest
-	UpdateChannelRequest = service.UpdateChannelRequest
-	CreateWebhookRequest = service.CreateWebhookRequest
-	UpdateWebhookRequest = service.UpdateWebhookRequest
+	CreateChannelRequest = relaydto.CreateChannelRequest
+	UpdateChannelRequest = relaydto.UpdateChannelRequest
+	CreateWebhookRequest = relaydto.CreateWebhookRequest
+	UpdateWebhookRequest = relaydto.UpdateWebhookRequest
 )
 
 var serviceMu sync.RWMutex

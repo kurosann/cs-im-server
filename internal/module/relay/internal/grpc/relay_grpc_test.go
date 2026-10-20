@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	relayservice "cs-im-server/internal/module/relay/internal/service"
 	relayv1 "github.com/kurosann/cs-im-internal-sdk/relay/v1"
 	"google.golang.org/grpc/codes"

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	gatewayv1 "github.com/kurosann/cs-im-sdk/gateway/v1"
 	"vane-common/pkg/dataaccess/store"
 	"vane-common/pkg/sqlitedb"

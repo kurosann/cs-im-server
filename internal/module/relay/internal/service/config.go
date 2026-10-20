@@ -7,6 +7,8 @@ import (
 
 	"vane-common/pkg/dataaccess"
 	"vane-common/pkg/idutil"
+
+	relaydto "cs-im-server/internal/module/relay/dto"
 )
 
 type RelayService struct {
@@ -22,34 +24,6 @@ type RelayService struct {
 	realtime         RealtimePublisher
 }
 
-type CreateChannelRequest struct {
-	Name     string         `json:"name"`
-	Type     string         `json:"type"`
-	Endpoint string         `json:"endpoint"`
-	Config   map[string]any `json:"config"`
-}
-
-type UpdateChannelRequest struct {
-	Name     string         `json:"name"`
-	Type     string         `json:"type"`
-	Endpoint string         `json:"endpoint"`
-	Config   map[string]any `json:"config"`
-}
-
-type CreateWebhookRequest struct {
-	Name     string   `json:"name"`
-	URL      string   `json:"url"`
-	Events   []string `json:"events"`
-	IsActive bool     `json:"isActive"`
-}
-
-type UpdateWebhookRequest struct {
-	Name     string   `json:"name"`
-	URL      string   `json:"url"`
-	Events   []string `json:"events"`
-	IsActive bool     `json:"isActive"`
-}
-
 func NewRelayService(realtime RealtimePublisher) *RelayService {
 	return &RelayService{
 		channels: make(map[string]*Channel),
@@ -59,7 +33,7 @@ func NewRelayService(realtime RealtimePublisher) *RelayService {
 	}
 }
 
-func (s *RelayService) CreateChannel(_ context.Context, req CreateChannelRequest) (Channel, error) {
+func (s *RelayService) CreateChannel(_ context.Context, req relaydto.CreateChannelRequest) (Channel, error) {
 	if req.Name == "" {
 		return Channel{}, badRequest("name is required")
 	}
@@ -98,7 +72,7 @@ func (s *RelayService) GetChannel(_ context.Context, id string) (Channel, error)
 	return *channel, nil
 }
 
-func (s *RelayService) UpdateChannel(_ context.Context, id string, req UpdateChannelRequest) (Channel, error) {
+func (s *RelayService) UpdateChannel(_ context.Context, id string, req relaydto.UpdateChannelRequest) (Channel, error) {
 	now := time.Now().UTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -167,7 +141,7 @@ func (s *RelayService) TestChannel(_ context.Context, id string) (Channel, error
 	return result, nil
 }
 
-func (s *RelayService) CreateWebhook(_ context.Context, req CreateWebhookRequest) (Webhook, error) {
+func (s *RelayService) CreateWebhook(_ context.Context, req relaydto.CreateWebhookRequest) (Webhook, error) {
 	if req.Name == "" {
 		return Webhook{}, badRequest("name is required")
 	}
@@ -209,7 +183,7 @@ func (s *RelayService) GetWebhook(_ context.Context, id string) (Webhook, error)
 	return *webhook, nil
 }
 
-func (s *RelayService) UpdateWebhook(_ context.Context, id string, req UpdateWebhookRequest) (Webhook, error) {
+func (s *RelayService) UpdateWebhook(_ context.Context, id string, req relaydto.UpdateWebhookRequest) (Webhook, error) {
 	now := time.Now().UTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -2,10 +2,11 @@ package api
 
 import (
 	"context"
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	"net/http"
 
 	"cs-im-server/internal/module/gateway/internal/service"
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	"cs-im-server/pkg/httpapi"
 	"cs-im-server/pkg/seqquery"
 	commonmodule "vane-common/module"
@@ -30,7 +31,7 @@ func (a *AppAPI) Register(ctx httpapi.Context) {
 		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
 		return
 	}
-	var req service.RegisterAppRequest
+	var req gatewaydto.RegisterAppRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
@@ -73,7 +74,7 @@ func (a *AppAPI) Heartbeat(ctx httpapi.Context) {
 		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
 		return
 	}
-	var req service.HeartbeatRequest
+	var req gatewaydto.HeartbeatRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return

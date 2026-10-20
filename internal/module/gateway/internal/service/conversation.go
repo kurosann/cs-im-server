@@ -9,6 +9,7 @@ import (
 	"vane-common/pkg/dataaccess"
 	"vane-common/pkg/idutil"
 
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	relaypkg "cs-im-server/internal/module/relay/pkg"
 )
 
@@ -22,33 +23,6 @@ type ConversationService struct {
 	customers            *CustomerService
 	messages             MessageStore
 	realtime             *RealtimeService
-}
-
-type CreateConversationRequest struct {
-	AppID      string `json:"appId"`
-	CustomerID string `json:"customerId"`
-	Channel    string `json:"channel"`
-	Subject    string `json:"subject"`
-}
-
-type AssignConversationRequest struct {
-	Assignee string `json:"assignee"`
-}
-
-type CloseConversationRequest struct {
-	Reason string `json:"reason"`
-}
-
-type ForwardConversationRequest struct {
-	MessageID string `json:"messageId"`
-	ChannelID string `json:"channelId"`
-}
-
-type EnsureConversationRequest struct {
-	CustomerExternalID string `json:"customerExternalId"`
-	CustomerName       string `json:"customerName"`
-	Channel            string `json:"channel"`
-	Subject            string `json:"subject"`
 }
 
 func NewConversationService(apps *AppService, customers *CustomerService, messages MessageStore, realtime *RealtimeService) *ConversationService {
@@ -70,14 +44,14 @@ func (s *ConversationService) SetForTest(conversation Conversation) {
 	s.conversations[conversation.ConversationKey] = &value
 }
 
-func (s *ConversationService) Ensure(ctx context.Context, appID string, req EnsureConversationRequest) (Conversation, bool, error) {
+func (s *ConversationService) Ensure(ctx context.Context, appID string, req gatewaydto.EnsureConversationRequest) (Conversation, bool, error) {
 	if appID == "" {
 		return Conversation{}, false, badRequest("appId is required")
 	}
 	if req.CustomerExternalID == "" {
 		return Conversation{}, false, badRequest("customerExternalId is required")
 	}
-	customer, err := s.customers.EnsureExternal(ctx, appID, EnsureExternalCustomerRequest{
+	customer, err := s.customers.EnsureExternal(ctx, appID, gatewaydto.EnsureExternalCustomerRequest{
 		ExternalID:  req.CustomerExternalID,
 		DisplayName: req.CustomerName,
 		Channel:     req.Channel,
@@ -96,7 +70,7 @@ func (s *ConversationService) Ensure(ctx context.Context, appID string, req Ensu
 	}
 	s.mu.Unlock()
 
-	conversation, err := s.Create(ctx, CreateConversationRequest{
+	conversation, err := s.Create(ctx, gatewaydto.CreateConversationRequest{
 		AppID:      appID,
 		CustomerID: customer.CustomerKey,
 		Channel:    req.Channel,
@@ -108,7 +82,7 @@ func (s *ConversationService) Ensure(ctx context.Context, appID string, req Ensu
 	return conversation, true, nil
 }
 
-func (s *ConversationService) Create(_ context.Context, req CreateConversationRequest) (Conversation, error) {
+func (s *ConversationService) Create(_ context.Context, req gatewaydto.CreateConversationRequest) (Conversation, error) {
 	if req.AppID == "" {
 		return Conversation{}, badRequest("appId is required")
 	}
@@ -167,7 +141,7 @@ func (s *ConversationService) Get(_ context.Context, id string) (Conversation, e
 	return *conversation, nil
 }
 
-func (s *ConversationService) Assign(_ context.Context, id string, req AssignConversationRequest) (Conversation, error) {
+func (s *ConversationService) Assign(_ context.Context, id string, req gatewaydto.AssignConversationRequest) (Conversation, error) {
 	if req.Assignee == "" {
 		return Conversation{}, badRequest("assignee is required")
 	}
@@ -191,7 +165,7 @@ func (s *ConversationService) Assign(_ context.Context, id string, req AssignCon
 	return result, nil
 }
 
-func (s *ConversationService) Close(_ context.Context, id string, req CloseConversationRequest) (Conversation, error) {
+func (s *ConversationService) Close(_ context.Context, id string, req gatewaydto.CloseConversationRequest) (Conversation, error) {
 	now := time.Now().UTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -216,7 +190,7 @@ func (s *ConversationService) Close(_ context.Context, id string, req CloseConve
 	return result, nil
 }
 
-func (s *ConversationService) Forward(_ context.Context, id string, req ForwardConversationRequest) (Delivery, error) {
+func (s *ConversationService) Forward(_ context.Context, id string, req gatewaydto.ForwardConversationRequest) (Delivery, error) {
 	if req.ChannelID == "" {
 		return Delivery{}, badRequest("channelId is required")
 	}

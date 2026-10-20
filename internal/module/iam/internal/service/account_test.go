@@ -2,6 +2,8 @@ package service_test
 
 import (
 	"context"
+	iamdto "cs-im-server/internal/module/iam/dto"
+	iamprincipal "cs-im-server/internal/module/iam/pkg/principal"
 	"testing"
 	"time"
 
@@ -26,16 +28,16 @@ func setupAccountService(t *testing.T) *iamservice.AccountService {
 	return iamservice.NewAccountService("bootstrap-token", "tenant_1", "relay-token")
 }
 
-func bootstrapPrincipal() iamservice.Principal {
-	return iamservice.Principal{
+func bootstrapPrincipal() iamprincipal.Principal {
+	return iamprincipal.Principal{
 		AccountKey: "dev-account",
 		TenantID:   "tenant_1",
-		Kind:       iamservice.PrincipalKindBusiness,
+		Kind:       iamprincipal.KindBusiness,
 		Scopes:     []string{iamservice.ScopeAll},
 	}
 }
 
-func issueToken(t *testing.T, service *iamservice.AccountService, principal iamservice.Principal, req iamservice.IssueAccountTokenRequest) iamservice.IssueAccountTokenResult {
+func issueToken(t *testing.T, service *iamservice.AccountService, principal iamprincipal.Principal, req iamdto.IssueAccountTokenRequest) iamdto.IssueAccountTokenResult {
 	t.Helper()
 	result, err := service.Issue(context.Background(), principal, req)
 	if err != nil {
@@ -49,7 +51,7 @@ func issueToken(t *testing.T, service *iamservice.AccountService, principal iams
 
 func TestAccountTokenLifecycle(t *testing.T) {
 	service := setupAccountService(t)
-	issued := issueToken(t, service, bootstrapPrincipal(), iamservice.IssueAccountTokenRequest{
+	issued := issueToken(t, service, bootstrapPrincipal(), iamdto.IssueAccountTokenRequest{
 		AccountKey: "app-account",
 		Name:       "app token",
 	})
@@ -58,7 +60,7 @@ func TestAccountTokenLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Authenticate() error = %v", err)
 	}
-	if principal.TenantID != "tenant_1" || principal.Kind != iamservice.PrincipalKindBusiness || !principal.HasScope(iamservice.ScopeChannelAccess) {
+	if principal.TenantID != "tenant_1" || principal.Kind != iamprincipal.KindBusiness || !principal.HasScope(iamservice.ScopeChannelAccess) {
 		t.Fatalf("Authenticate() = %+v", principal)
 	}
 
@@ -92,7 +94,7 @@ func TestAccountTokenLifecycle(t *testing.T) {
 func TestAccountTokenExpiry(t *testing.T) {
 	service := setupAccountService(t)
 	expiresAt := time.Now().Add(-time.Minute)
-	issued := issueToken(t, service, bootstrapPrincipal(), iamservice.IssueAccountTokenRequest{
+	issued := issueToken(t, service, bootstrapPrincipal(), iamdto.IssueAccountTokenRequest{
 		AccountKey: "app-account",
 		ExpiresAt:  &expiresAt,
 	})
@@ -103,18 +105,18 @@ func TestAccountTokenExpiry(t *testing.T) {
 
 func TestAccountTokenPermissionBoundary(t *testing.T) {
 	service := setupAccountService(t)
-	issued := issueToken(t, service, bootstrapPrincipal(), iamservice.IssueAccountTokenRequest{
+	issued := issueToken(t, service, bootstrapPrincipal(), iamdto.IssueAccountTokenRequest{
 		AccountKey: "app-account",
 	})
 	principal, err := service.Authenticate(context.Background(), issued.Secret)
 	if err != nil {
 		t.Fatalf("Authenticate() error = %v", err)
 	}
-	if _, err := service.Issue(context.Background(), principal, iamservice.IssueAccountTokenRequest{AccountKey: "app-account"}); err == nil {
+	if _, err := service.Issue(context.Background(), principal, iamdto.IssueAccountTokenRequest{AccountKey: "app-account"}); err == nil {
 		t.Fatal("Issue() allowed token without management scope")
 	}
 
-	manager := issueToken(t, service, bootstrapPrincipal(), iamservice.IssueAccountTokenRequest{
+	manager := issueToken(t, service, bootstrapPrincipal(), iamdto.IssueAccountTokenRequest{
 		AccountKey: "manager-account",
 		Scopes:     []string{iamservice.ScopeIAMTokenManage, iamservice.ScopeRelayAccess},
 	})
@@ -122,9 +124,9 @@ func TestAccountTokenPermissionBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Authenticate() manager error = %v", err)
 	}
-	if _, err := service.Issue(context.Background(), managerPrincipal, iamservice.IssueAccountTokenRequest{
+	if _, err := service.Issue(context.Background(), managerPrincipal, iamdto.IssueAccountTokenRequest{
 		AccountKey: "manager-account",
-		Kind:       iamservice.PrincipalKindRelay,
+		Kind:       iamprincipal.KindRelay,
 		Scopes:     []string{iamservice.ScopeRelayAccess},
 	}); err == nil {
 		t.Fatal("Issue() allowed business token to issue relay token")
@@ -133,7 +135,7 @@ func TestAccountTokenPermissionBoundary(t *testing.T) {
 
 func TestAccountTokenTenantBoundary(t *testing.T) {
 	service := setupAccountService(t)
-	issued := issueToken(t, service, bootstrapPrincipal(), iamservice.IssueAccountTokenRequest{
+	issued := issueToken(t, service, bootstrapPrincipal(), iamdto.IssueAccountTokenRequest{
 		AccountKey: "app-account",
 	})
 	principal, err := service.Authenticate(context.Background(), issued.Secret)
@@ -144,7 +146,7 @@ func TestAccountTokenTenantBoundary(t *testing.T) {
 		t.Fatal("Get() allowed same account without management scope")
 	}
 
-	bootstrap := issueToken(t, service, bootstrapPrincipal(), iamservice.IssueAccountTokenRequest{
+	bootstrap := issueToken(t, service, bootstrapPrincipal(), iamdto.IssueAccountTokenRequest{
 		AccountKey: "other-account",
 		TenantID:   "tenant_2",
 	})

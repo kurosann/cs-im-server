@@ -1,10 +1,11 @@
 package api
 
 import (
+	iamdto "cs-im-server/internal/module/iam/dto"
 	"net/http"
 
 	"cs-im-server/internal/module/iam/internal/service"
-	pkg "cs-im-server/internal/module/iam/pkg"
+	pkg "cs-im-server/internal/module/iam/pkg/iam"
 	"cs-im-server/pkg/httpapi"
 
 	commonmodule "vane-common/module"
@@ -30,7 +31,7 @@ func (a *ChannelCredentialAPI) Routes() commonmodule.HttpRouteGroup {
 }
 
 func (a *ChannelCredentialAPI) Issue(ctx httpapi.Context) {
-	var req service.IssueChannelCredentialRequest
+	var req iamdto.IssueChannelCredentialRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return

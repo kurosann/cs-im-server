@@ -1,9 +1,13 @@
-package iam
+package http
 
 import (
-	"net/http"
+	nethttp "net/http"
 	"strings"
 
+	iamdto "cs-im-server/internal/module/iam/dto"
+	service "cs-im-server/internal/module/iam/internal/service"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
+	iamprincipal "cs-im-server/internal/module/iam/pkg/principal"
 	commonmodule "vane-common/module"
 )
 
@@ -14,15 +18,19 @@ func AccountTokenMiddleware() commonmodule.HttpMiddleware {
 			if token == "" {
 				token = ctx.Header("X-Access-Token")
 			}
-			principal, err := Service().Authenticate(ctx.Context(), token)
+			principal, err := iampkg.Service().Authenticate(ctx.Context(), token)
 			if err != nil {
-				_ = ctx.JSON(http.StatusUnauthorized, map[string]any{
+				_ = ctx.JSON(nethttp.StatusUnauthorized, map[string]any{
 					"code":    "UNAUTHORIZED",
 					"message": "invalid account token",
 				})
 				return
 			}
-			ctx.SetValue(PrincipalContextKey{}, principal)
+			ctx.SetValue(iamprincipal.ContextKey{}, principal)
+			ctx.SetValue(service.AuditContextKey{}, iamdto.AuditContext{
+				Device: ctx.Header("User-Agent"),
+				IP:     ctx.ClientIP(),
+			})
 			next(ctx)
 		}
 	}
@@ -31,9 +39,9 @@ func AccountTokenMiddleware() commonmodule.HttpMiddleware {
 func RequirePrincipalKind(kind string) commonmodule.HttpMiddleware {
 	return func(next commonmodule.HttpHandler) commonmodule.HttpHandler {
 		return func(ctx commonmodule.HttpReqContext) {
-			principal, ok := PrincipalFromContext(ctx.Context())
+			principal, ok := iamprincipal.FromContext(ctx.Context())
 			if !ok || !principal.HasKind(kind) {
-				_ = ctx.JSON(http.StatusForbidden, map[string]any{
+				_ = ctx.JSON(nethttp.StatusForbidden, map[string]any{
 					"code":    "FORBIDDEN",
 					"message": "principal kind is not allowed",
 				})
@@ -47,9 +55,9 @@ func RequirePrincipalKind(kind string) commonmodule.HttpMiddleware {
 func RequirePrincipalScope(scope string) commonmodule.HttpMiddleware {
 	return func(next commonmodule.HttpHandler) commonmodule.HttpHandler {
 		return func(ctx commonmodule.HttpReqContext) {
-			principal, ok := PrincipalFromContext(ctx.Context())
+			principal, ok := iamprincipal.FromContext(ctx.Context())
 			if !ok || !principal.HasScope(scope) {
-				_ = ctx.JSON(http.StatusForbidden, map[string]any{
+				_ = ctx.JSON(nethttp.StatusForbidden, map[string]any{
 					"code":    "FORBIDDEN",
 					"message": "principal scope is not allowed",
 				})

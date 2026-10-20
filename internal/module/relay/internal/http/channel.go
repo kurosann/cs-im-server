@@ -1,6 +1,7 @@
 package http
 
 import (
+	relaydto "cs-im-server/internal/module/relay/dto"
 	"net/http"
 
 	"cs-im-server/internal/module/relay/internal/service"
@@ -17,7 +18,7 @@ func NewChannelAPI(relayService *service.RelayService) *ChannelAPI {
 }
 
 func (a *ChannelAPI) Create(ctx httpapi.Context) {
-	var req service.CreateChannelRequest
+	var req relaydto.CreateChannelRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
@@ -63,7 +64,7 @@ func (a *ChannelAPI) Disable(ctx httpapi.Context) {
 }
 
 func (a *ChannelAPI) Update(ctx httpapi.Context) {
-	var req service.UpdateChannelRequest
+	var req relaydto.UpdateChannelRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return

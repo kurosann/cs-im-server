@@ -1,6 +1,7 @@
 package api
 
 import (
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	"net/http"
 
 	"cs-im-server/internal/module/gateway/internal/service"
@@ -18,7 +19,7 @@ func NewMessageAPI(messageService *service.MessageService) *MessageAPI {
 }
 
 func (a *MessageAPI) Create(ctx httpapi.Context) {
-	var req service.CreateMessageRequest
+	var req gatewaydto.CreateMessageRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
@@ -41,7 +42,7 @@ func (a *MessageAPI) Get(ctx httpapi.Context) {
 }
 
 func (a *MessageAPI) UpdateStatus(ctx httpapi.Context) {
-	var req service.UpdateMessageStatusRequest
+	var req gatewaydto.UpdateMessageStatusRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return

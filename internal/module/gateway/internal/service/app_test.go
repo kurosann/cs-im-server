@@ -2,10 +2,11 @@ package service
 
 import (
 	"context"
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	"testing"
 
 	gatewaymodel "cs-im-server/internal/module/gateway/internal/model"
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 
 	"vane-common/pkg/dataaccess"
 	"vane-common/pkg/dataaccess/store"
@@ -50,7 +51,7 @@ func staffPrincipal(tenantID string) Principal {
 
 func registerApp(t *testing.T, service *AppService, tenantID, serviceKey, name string) App {
 	t.Helper()
-	app, err := service.Register(context.Background(), staffPrincipal(tenantID), RegisterAppRequest{
+	app, err := service.Register(context.Background(), staffPrincipal(tenantID), gatewaydto.RegisterAppRequest{
 		ServiceKey:  serviceKey,
 		DisplayName: name,
 	})
@@ -80,7 +81,7 @@ func TestAppServiceTenantBoundary(t *testing.T) {
 	if _, err := service.GetAuthorized(context.Background(), principal1, tenant2App.AppKey); err == nil {
 		t.Fatal("GetAuthorized() allowed other tenant app")
 	}
-	if _, err := service.Heartbeat(context.Background(), principal1, HeartbeatRequest{AppID: tenant2App.AppKey}); err == nil {
+	if _, err := service.Heartbeat(context.Background(), principal1, gatewaydto.HeartbeatRequest{AppID: tenant2App.AppKey}); err == nil {
 		t.Fatal("Heartbeat() allowed other tenant app")
 	}
 	if _, err := service.SetStatus(context.Background(), principal1, tenant2App.AppKey, false); err == nil {

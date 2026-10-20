@@ -9,7 +9,8 @@ import (
 	"vane-common/pkg/dataaccess"
 	"vane-common/pkg/idutil"
 
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 )
 
 type AppService struct {
@@ -20,23 +21,6 @@ type AppService struct {
 	realtime     *RealtimeService
 }
 
-type RegisterAppRequest struct {
-	ServiceKey      string   `json:"serviceKey"`
-	DisplayName     string   `json:"displayName"`
-	Kind            string   `json:"kind"`
-	Version         string   `json:"version"`
-	Capabilities    []string `json:"capabilities"`
-	LeaseTTLSeconds int      `json:"leaseTtlSeconds"`
-}
-
-type HeartbeatRequest struct {
-	AppID        string   `json:"appId"`
-	InstanceID   string   `json:"instanceId"`
-	Version      string   `json:"version"`
-	Capabilities []string `json:"capabilities"`
-	TTLSeconds   int      `json:"ttlSeconds"`
-}
-
 func NewAppService(realtime *RealtimeService) *AppService {
 	return &AppService{
 		apps:         make(map[string]*App),
@@ -45,7 +29,7 @@ func NewAppService(realtime *RealtimeService) *AppService {
 	}
 }
 
-func (s *AppService) Register(_ context.Context, principal Principal, req RegisterAppRequest) (App, error) {
+func (s *AppService) Register(_ context.Context, principal Principal, req gatewaydto.RegisterAppRequest) (App, error) {
 	if req.ServiceKey == "" {
 		return App{}, badRequest("serviceKey is required")
 	}
@@ -130,7 +114,7 @@ func (s *AppService) GetAuthorized(_ context.Context, principal Principal, id st
 	return app, nil
 }
 
-func (s *AppService) Heartbeat(_ context.Context, principal Principal, req HeartbeatRequest) (App, error) {
+func (s *AppService) Heartbeat(_ context.Context, principal Principal, req gatewaydto.HeartbeatRequest) (App, error) {
 	if req.AppID == "" {
 		return App{}, badRequest("appId is required")
 	}

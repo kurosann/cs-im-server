@@ -4,36 +4,38 @@ import (
 	"context"
 	"sync"
 
+	iamdto "cs-im-server/internal/module/iam/dto"
 	model "cs-im-server/internal/module/iam/internal/model"
 	service "cs-im-server/internal/module/iam/internal/service"
+	iamprincipal "cs-im-server/internal/module/iam/pkg/principal"
 )
 
 type (
-	Principal                     = service.Principal
-	PrincipalContextKey           = service.PrincipalContextKey
+	Principal                     = iamprincipal.Principal
+	PrincipalContextKey           = iamprincipal.ContextKey
 	AccountService                = service.AccountService
-	AccountTokenInfo              = service.AccountTokenInfo
-	IssueAccountTokenRequest      = service.IssueAccountTokenRequest
-	IssueAccountTokenResult       = service.IssueAccountTokenResult
-	ChannelCredentialInfo         = service.ChannelCredentialInfo
-	IssueChannelCredentialRequest = service.IssueChannelCredentialRequest
-	IssueChannelCredentialResult  = service.IssueChannelCredentialResult
+	AccountTokenInfo              = iamdto.AccountTokenInfo
+	IssueAccountTokenRequest      = iamdto.IssueAccountTokenRequest
+	IssueAccountTokenResult       = iamdto.IssueAccountTokenResult
+	ChannelCredentialInfo         = iamdto.ChannelCredentialInfo
+	IssueChannelCredentialRequest = iamdto.IssueChannelCredentialRequest
+	IssueChannelCredentialResult  = iamdto.IssueChannelCredentialResult
 	AccountToken                  = model.AccountToken
 	ChannelCredential             = model.ChannelCredential
 )
 
 const (
-	PrincipalKindBusiness = service.PrincipalKindBusiness
-	PrincipalKindRelay    = service.PrincipalKindRelay
+	PrincipalKindBusiness = iamprincipal.KindBusiness
+	PrincipalKindRelay    = iamprincipal.KindRelay
 	ScopeAll              = service.ScopeAll
 	ScopeGatewayAdmin     = service.ScopeGatewayAdmin
 	ScopeIAMTokenManage   = service.ScopeIAMTokenManage
 	ScopeChannelAccess    = service.ScopeChannelAccess
 	ScopeRelayAccess      = service.ScopeRelayAccess
-	PrincipalKindHuman    = service.PrincipalKindHuman
+	PrincipalKindHuman    = iamprincipal.KindHuman
 )
 
-var ErrPrincipalMissing = service.ErrPrincipalMissing
+var ErrPrincipalMissing = iamprincipal.ErrMissing
 
 var serviceMu sync.RWMutex
 var accountService *AccountService
@@ -74,9 +76,9 @@ func NewAccountService(bootstrapToken, tenantID string) *AccountService {
 }
 
 func WithPrincipal(ctx context.Context, principal Principal) context.Context {
-	return service.WithPrincipal(ctx, principal)
+	return iamprincipal.WithPrincipal(ctx, principal)
 }
 
 func PrincipalFromContext(ctx context.Context) (Principal, bool) {
-	return service.PrincipalFromContext(ctx)
+	return iamprincipal.FromContext(ctx)
 }

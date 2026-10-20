@@ -5,7 +5,7 @@ import (
 	"time"
 
 	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	"cs-im-server/pkg/grpcapi"
 	gatewayv1 "github.com/kurosann/cs-im-sdk/gateway/v1"
 )

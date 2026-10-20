@@ -1,10 +1,11 @@
 package api
 
 import (
+	iamdto "cs-im-server/internal/module/iam/dto"
 	"net/http"
 
 	"cs-im-server/internal/module/iam/internal/service"
-	pkg "cs-im-server/internal/module/iam/pkg"
+	pkg "cs-im-server/internal/module/iam/pkg/iam"
 	"cs-im-server/pkg/httpapi"
 
 	commonmodule "vane-common/module"
@@ -35,7 +36,7 @@ func (a *TokenAPI) Issue(ctx httpapi.Context) {
 		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
 		return
 	}
-	var req service.IssueAccountTokenRequest
+	var req iamdto.IssueAccountTokenRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return

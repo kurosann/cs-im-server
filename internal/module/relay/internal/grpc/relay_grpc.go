@@ -2,9 +2,10 @@ package grpc
 
 import (
 	"context"
+	relaydto "cs-im-server/internal/module/relay/dto"
 	"time"
 
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	relayService "cs-im-server/internal/module/relay/internal/service"
 	relaypkg "cs-im-server/internal/module/relay/pkg"
 	"cs-im-server/pkg/grpcapi"
@@ -63,7 +64,7 @@ func (a *RelayChannelGRPCAPI) CreateChannel(ctx context.Context, req *relayv1.Cr
 	if err := a.authorize(ctx); err != nil {
 		return nil, err
 	}
-	channel, err := a.Service.CreateChannel(ctx, relayService.CreateChannelRequest{
+	channel, err := a.Service.CreateChannel(ctx, relaydto.CreateChannelRequest{
 		Name:     req.GetName(),
 		Type:     req.GetType(),
 		Endpoint: req.GetEndpoint(),
@@ -114,7 +115,7 @@ func (a *RelayChannelGRPCAPI) UpdateChannel(ctx context.Context, req *relayv1.Up
 	if err := a.authorize(ctx); err != nil {
 		return nil, err
 	}
-	channel, err := a.Service.UpdateChannel(ctx, req.GetChannelId(), relayService.UpdateChannelRequest{
+	channel, err := a.Service.UpdateChannel(ctx, req.GetChannelId(), relaydto.UpdateChannelRequest{
 		Name:     req.GetName(),
 		Endpoint: req.GetEndpoint(),
 		Config:   configFromProto(req.GetConfig()),

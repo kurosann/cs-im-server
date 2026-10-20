@@ -2,9 +2,10 @@ package relay
 
 import (
 	"context"
+	iamhttp "cs-im-server/internal/module/iam/pkg/http"
 
 	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	relaygrpc "cs-im-server/internal/module/relay/internal/grpc"
 	relayhttp "cs-im-server/internal/module/relay/internal/http"
 	relaymodel "cs-im-server/internal/module/relay/internal/model"
@@ -62,6 +63,6 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	relayEvents := relayMessages.Routes()
 	return commonmodule.HttpApiInfo{
 		Handlers:    commonmodule.MergeHandlers(admin.Handlers(), channelEvents.Handlers(), relayEvents.Handlers()),
-		Middlewares: []commonmodule.HttpMiddleware{iampkg.AccountTokenMiddleware()},
+		Middlewares: []commonmodule.HttpMiddleware{iamhttp.AccountTokenMiddleware()},
 	}
 }

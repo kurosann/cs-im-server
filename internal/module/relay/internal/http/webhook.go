@@ -1,6 +1,7 @@
 package http
 
 import (
+	relaydto "cs-im-server/internal/module/relay/dto"
 	"net/http"
 
 	"cs-im-server/internal/module/relay/internal/service"
@@ -17,7 +18,7 @@ func NewWebhookAPI(relayService *service.RelayService) *WebhookAPI {
 }
 
 func (a *WebhookAPI) Create(ctx httpapi.Context) {
-	var req service.CreateWebhookRequest
+	var req relaydto.CreateWebhookRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
@@ -45,7 +46,7 @@ func (a *WebhookAPI) Get(ctx httpapi.Context) {
 }
 
 func (a *WebhookAPI) Update(ctx httpapi.Context) {
-	var req service.UpdateWebhookRequest
+	var req relaydto.UpdateWebhookRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
