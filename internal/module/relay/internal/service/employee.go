@@ -23,26 +23,33 @@ const (
 	employeeHistoryMax        = 50
 	employeeNameMaxRunes      = 50
 	employeeDeletedNamePrefix = "__deleted__:"
+	channelBindingAccountKey  = "*"
 )
 
-type AccountBinding struct {
-	Platform   string `json:"platform"`
-	AccountKey string `json:"accountKey"`
-	Label      string `json:"label,omitempty"`
+var channelDisplayNames = map[string]string{
+	"whatsapp":  "WhatsApp",
+	"telegram":  "Telegram",
+	"web":       "Web Chat",
+	"messenger": "Messenger",
+}
+
+type ChannelBinding struct {
+	Platform string `json:"platform"`
+	Label    string `json:"label,omitempty"`
 }
 
 type EmployeeView struct {
-	EmployeeID      string           `json:"employeeId"`
-	Name            string           `json:"name"`
-	Persona         string           `json:"persona"`
-	Status          string           `json:"status"`
-	Mode            string           `json:"mode"`
-	Prompt          string           `json:"prompt"`
-	History         int              `json:"history"`
-	AutoReply       bool             `json:"autoReply"`
-	SelectedDocIDs  []string         `json:"selectedDocIds"`
-	Tools           []string         `json:"tools"`
-	AccountBindings []AccountBinding `json:"accountBindings"`
+	EmployeeID     string           `json:"employeeId"`
+	Name           string           `json:"name"`
+	Persona        string           `json:"persona"`
+	Status         string           `json:"status"`
+	Mode           string           `json:"mode"`
+	Prompt         string           `json:"prompt"`
+	History        int              `json:"history"`
+	AutoReply      bool             `json:"autoReply"`
+	SelectedDocIDs []string         `json:"selectedDocIds"`
+	Tools          []string         `json:"tools"`
+	Channels       []ChannelBinding `json:"channels"`
 }
 
 type CreateEmployeeRequest struct {
@@ -50,16 +57,16 @@ type CreateEmployeeRequest struct {
 }
 
 type UpdateEmployeeRequest struct {
-	Name            string           `json:"name"`
-	Persona         string           `json:"persona"`
-	Status          string           `json:"status"`
-	Mode            string           `json:"mode"`
-	Prompt          string           `json:"prompt"`
-	History         int              `json:"history"`
-	AutoReply       bool             `json:"autoReply"`
-	SelectedDocIDs  []string         `json:"selectedDocIds"`
-	Tools           []string         `json:"tools"`
-	AccountBindings []AccountBinding `json:"accountBindings"`
+	Name           string           `json:"name"`
+	Persona        string           `json:"persona"`
+	Status         string           `json:"status"`
+	Mode           string           `json:"mode"`
+	Prompt         string           `json:"prompt"`
+	History        int              `json:"history"`
+	AutoReply      bool             `json:"autoReply"`
+	SelectedDocIDs []string         `json:"selectedDocIds"`
+	Tools          []string         `json:"tools"`
+	Channels       []ChannelBinding `json:"channels"`
 }
 
 func (s *RelayService) ListEmployees(ctx context.Context, accountKey, tenantID string) ([]EmployeeView, error) {
@@ -76,7 +83,7 @@ func (s *RelayService) ListEmployees(ctx context.Context, accountKey, tenantID s
 	if err != nil {
 		return nil, err
 	}
-	labels, err := s.accountLabels(ctx, tenantID)
+	labels, err := s.channelLabels(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +98,8 @@ func (s *RelayService) ListEmployees(ctx context.Context, accountKey, tenantID s
 	return views, nil
 }
 
-func (s *RelayService) ListEmployeeAccounts(ctx context.Context, tenantID string) ([]AccountBinding, error) {
-	return s.accountOptions(ctx, strings.TrimSpace(tenantID))
+func (s *RelayService) ListEmployeeChannels(ctx context.Context, tenantID string) ([]ChannelBinding, error) {
+	return s.channelOptions(ctx, strings.TrimSpace(tenantID))
 }
 
 func (s *RelayService) CreateEmployee(ctx context.Context, accountKey string, req CreateEmployeeRequest) (EmployeeView, error) {
@@ -125,7 +132,7 @@ func (s *RelayService) CreateEmployee(ctx context.Context, accountKey string, re
 		}
 		return EmployeeView{}, err
 	}
-	return employeeView(item, []AccountBinding{}), nil
+	return employeeView(item, []ChannelBinding{}), nil
 }
 
 func (s *RelayService) UpdateEmployee(ctx context.Context, accountKey, tenantID, employeeID string, req UpdateEmployeeRequest) (EmployeeView, error) {
@@ -155,11 +162,11 @@ func (s *RelayService) UpdateEmployee(ctx context.Context, accountKey, tenantID,
 	}
 	docs := normalizeStringList(req.SelectedDocIDs)
 	tools := normalizeStringList(req.Tools)
-	options, err := s.accountOptions(ctx, tenantID)
+	options, err := s.channelOptions(ctx, tenantID)
 	if err != nil {
 		return EmployeeView{}, err
 	}
-	desired, err := normalizeBindings(req.AccountBindings, options)
+	desired, err := normalizeBindings(req.Channels, options)
 	if err != nil {
 		return EmployeeView{}, err
 	}
@@ -236,7 +243,7 @@ func (s *RelayService) findEmployee(ctx context.Context, accountKey, employeeID 
 	)
 	if err != nil {
 		if errors.Is(err, dataaccess.ErrDataNotFound) {
-			return nil, notFound("AI 客服员工不存在")
+			return nil, notFound("AI 客服不存在")
 		}
 		return nil, err
 	}
@@ -261,27 +268,25 @@ func (s *RelayService) ensureEmployeeNameAvailable(ctx context.Context, accountK
 	return nil
 }
 
-func (s *RelayService) ensureBindingsAvailable(ctx context.Context, accountKey, employeeID string, desired []AccountBinding) error {
+func (s *RelayService) ensureBindingsAvailable(ctx context.Context, accountKey, employeeID string, desired []ChannelBinding) error {
 	for _, binding := range desired {
-		current, err := s.bindings.First(ctx,
+		rows, err := s.bindings.List(ctx,
 			dataaccess.Eq("account_key", accountKey),
 			dataaccess.Eq("platform", binding.Platform),
-			dataaccess.Eq("account_key_binding", binding.AccountKey),
 		)
-		if errors.Is(err, dataaccess.ErrDataNotFound) {
-			continue
-		}
 		if err != nil {
 			return err
 		}
-		if current.EmployeeKey != employeeID {
-			return conflict("账号 %s 已绑定到其他 AI 客服员工", binding.LabelOrKey())
+		for _, current := range rows {
+			if current.EmployeeKey != employeeID {
+				return conflict("渠道 %s 已绑定到其他 AI 客服", binding.displayName())
+			}
 		}
 	}
 	return nil
 }
 
-func (s *RelayService) replaceBindings(ctx context.Context, accountKey, employeeID string, desired []AccountBinding) error {
+func (s *RelayService) replaceBindings(ctx context.Context, accountKey, employeeID string, desired []ChannelBinding) error {
 	current, err := s.bindings.List(ctx,
 		dataaccess.Eq("account_key", accountKey),
 		dataaccess.Eq("employee_key", employeeID),
@@ -299,11 +304,11 @@ func (s *RelayService) replaceBindings(ctx context.Context, accountKey, employee
 			AccountKey:      accountKey,
 			EmployeeKey:     employeeID,
 			Platform:        binding.Platform,
-			BoundAccountKey: binding.AccountKey,
+			BoundAccountKey: channelBindingAccountKey,
 		}
 		if err := s.bindings.Create(ctx, row); err != nil {
 			if isDuplicateKey(err) {
-				return conflict("账号 %s 已绑定到其他 AI 客服员工", binding.LabelOrKey())
+				return conflict("渠道 %s 已绑定到其他 AI 客服", binding.displayName())
 			}
 			return err
 		}
@@ -311,7 +316,7 @@ func (s *RelayService) replaceBindings(ctx context.Context, accountKey, employee
 	return nil
 }
 
-func (s *RelayService) bindingsFor(ctx context.Context, accountKey, employeeID string, labels map[string]string) ([]AccountBinding, error) {
+func (s *RelayService) bindingsFor(ctx context.Context, accountKey, employeeID string, labels map[string]string) ([]ChannelBinding, error) {
 	rows, err := s.bindings.List(ctx,
 		dataaccess.Eq("account_key", accountKey),
 		dataaccess.Eq("employee_key", employeeID),
@@ -321,27 +326,31 @@ func (s *RelayService) bindingsFor(ctx context.Context, accountKey, employeeID s
 	if err != nil {
 		return nil, err
 	}
-	out := make([]AccountBinding, 0, len(rows))
+	seen := make(map[string]struct{}, len(rows))
+	out := make([]ChannelBinding, 0, len(rows))
 	for _, row := range rows {
-		binding := AccountBinding{Platform: row.Platform, AccountKey: row.BoundAccountKey}
-		binding.Label = labels[binding.identity()]
-		if binding.Label == "" {
-			binding.Label = binding.AccountKey
+		platform := normalizePlatform(row.Platform)
+		if platform == "" {
+			continue
 		}
-		out = append(out, binding)
+		if _, ok := seen[platform]; ok {
+			continue
+		}
+		seen[platform] = struct{}{}
+		out = append(out, ChannelBinding{Platform: platform, Label: channelLabel(platform, labels[platform])})
 	}
 	return out, nil
 }
 
-func (s *RelayService) accountLabels(ctx context.Context, tenantID string) (map[string]string, error) {
-	options, err := s.accountOptions(ctx, tenantID)
+func (s *RelayService) channelLabels(ctx context.Context, tenantID string) (map[string]string, error) {
+	options, err := s.channelOptions(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
 	return labelIndex(options), nil
 }
 
-func (s *RelayService) accountOptions(ctx context.Context, tenantID string) ([]AccountBinding, error) {
+func (s *RelayService) channelOptions(ctx context.Context, tenantID string) ([]ChannelBinding, error) {
 	channels, err := s.channelAccessor.List(ctx)
 	if err != nil {
 		return nil, err
@@ -353,60 +362,45 @@ func (s *RelayService) accountOptions(ctx context.Context, tenantID string) ([]A
 			return nil, err
 		}
 	}
-	options := make([]AccountBinding, 0, len(channels)+len(apps))
+	seen := make(map[string]ChannelBinding, len(channels)+len(apps))
 	for _, app := range apps {
-		if app == nil || strings.TrimSpace(app.AppKey) == "" {
+		if app == nil {
 			continue
 		}
-		platform := normalizePlatform(app.Kind)
-		if platform == "" {
-			platform = "app"
-		}
-		label := strings.TrimSpace(app.DisplayName)
-		if label == "" {
-			label = app.AppKey
-		}
-		options = append(options, AccountBinding{Platform: platform, AccountKey: app.AppKey, Label: label})
+		rememberChannel(seen, app.Kind)
 	}
 	for _, channel := range channels {
-		if channel == nil || strings.TrimSpace(channel.ChannelKey) == "" {
+		if channel == nil {
 			continue
 		}
-		platform := normalizePlatform(channel.Type)
-		if platform == "" {
-			platform = "channel"
-		}
-		label := strings.TrimSpace(channel.Name)
-		if label == "" {
-			label = channel.ChannelKey
-		}
-		options = append(options, AccountBinding{Platform: platform, AccountKey: channel.ChannelKey, Label: label})
+		rememberChannel(seen, channel.Type)
+	}
+	options := make([]ChannelBinding, 0, len(seen))
+	for _, option := range seen {
+		options = append(options, option)
 	}
 	sort.Slice(options, func(i, j int) bool {
-		if options[i].Platform == options[j].Platform {
-			return options[i].Label < options[j].Label
-		}
 		return options[i].Platform < options[j].Platform
 	})
 	return options, nil
 }
 
-func employeeView(item *AIEmployee, bindings []AccountBinding) EmployeeView {
+func employeeView(item *AIEmployee, bindings []ChannelBinding) EmployeeView {
 	if bindings == nil {
-		bindings = []AccountBinding{}
+		bindings = []ChannelBinding{}
 	}
 	return EmployeeView{
-		EmployeeID:      item.EmployeeKey,
-		Name:            item.Name,
-		Persona:         item.Persona,
-		Status:          item.Status,
-		Mode:            item.Mode,
-		Prompt:          item.Prompt,
-		History:         item.HistoryMessageCount,
-		AutoReply:       item.AutoReplyEnabled,
-		SelectedDocIDs:  stringList(item.SelectedDocIDs),
-		Tools:           stringList(item.Tools),
-		AccountBindings: bindings,
+		EmployeeID:     item.EmployeeKey,
+		Name:           item.Name,
+		Persona:        item.Persona,
+		Status:         item.Status,
+		Mode:           item.Mode,
+		Prompt:         item.Prompt,
+		History:        item.HistoryMessageCount,
+		AutoReply:      item.AutoReplyEnabled,
+		SelectedDocIDs: stringList(item.SelectedDocIDs),
+		Tools:          stringList(item.Tools),
+		Channels:       bindings,
 	}
 }
 
@@ -459,33 +453,29 @@ func normalizeStringList(values []string) []string {
 	return out
 }
 
-func normalizeBindings(values, options []AccountBinding) ([]AccountBinding, error) {
-	allowed := make(map[string]AccountBinding, len(options))
+func normalizeBindings(values, options []ChannelBinding) ([]ChannelBinding, error) {
+	allowed := make(map[string]ChannelBinding, len(options))
 	for _, option := range options {
-		allowed[option.identity()] = option
+		allowed[option.Platform] = option
 	}
 	seen := make(map[string]struct{}, len(values))
-	out := make([]AccountBinding, 0, len(values))
+	out := make([]ChannelBinding, 0, len(values))
 	for _, value := range values {
-		value.Platform = normalizePlatform(value.Platform)
-		value.AccountKey = strings.TrimSpace(value.AccountKey)
-		if value.Platform == "" || value.AccountKey == "" {
-			return nil, badRequest("账号绑定不完整")
+		platform := normalizePlatform(value.Platform)
+		if platform == "" {
+			return nil, badRequest("渠道绑定不完整")
 		}
-		option, ok := allowed[value.identity()]
+		option, ok := allowed[platform]
 		if !ok {
-			return nil, badRequest("账号不存在")
+			return nil, badRequest("渠道不存在")
 		}
-		if _, ok := seen[value.identity()]; ok {
+		if _, ok := seen[platform]; ok {
 			continue
 		}
-		seen[value.identity()] = struct{}{}
+		seen[platform] = struct{}{}
 		out = append(out, option)
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].Platform == out[j].Platform {
-			return out[i].AccountKey < out[j].AccountKey
-		}
 		return out[i].Platform < out[j].Platform
 	})
 	return out, nil
@@ -495,37 +485,59 @@ func normalizePlatform(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
 }
 
-func (b AccountBinding) identity() string {
-	return normalizePlatform(b.Platform) + "\x00" + strings.TrimSpace(b.AccountKey)
+func rememberChannel(seen map[string]ChannelBinding, raw string) {
+	platform := normalizePlatform(raw)
+	if platform == "" {
+		return
+	}
+	if _, ok := seen[platform]; ok {
+		return
+	}
+	seen[platform] = ChannelBinding{Platform: platform, Label: channelLabel(platform, raw)}
 }
 
-func (b AccountBinding) LabelOrKey() string {
+func channelLabel(platform, raw string) string {
+	if label, ok := channelDisplayNames[platform]; ok {
+		return label
+	}
+	if label := strings.TrimSpace(raw); label != "" {
+		return label
+	}
+	return platform
+}
+
+func (b ChannelBinding) displayName() string {
 	if label := strings.TrimSpace(b.Label); label != "" {
 		return label
 	}
-	return b.AccountKey
+	return channelLabel(b.Platform, b.Platform)
 }
 
-func labelIndex(options []AccountBinding) map[string]string {
+func labelIndex(options []ChannelBinding) map[string]string {
 	labels := make(map[string]string, len(options))
 	for _, option := range options {
-		labels[option.identity()] = option.Label
+		labels[option.Platform] = option.Label
 	}
 	return labels
 }
 
-func bindingsWithLabels(bindings []AccountBinding, labels map[string]string) []AccountBinding {
-	out := make([]AccountBinding, 0, len(bindings))
+func bindingsWithLabels(bindings []ChannelBinding, labels map[string]string) []ChannelBinding {
+	out := make([]ChannelBinding, 0, len(bindings))
 	for _, binding := range bindings {
-		if binding.Label == "" {
-			binding.Label = labels[binding.identity()]
-		}
-		if binding.Label == "" {
-			binding.Label = binding.AccountKey
-		}
+		binding.Platform = normalizePlatform(binding.Platform)
+		binding.Label = channelLabel(binding.Platform, firstNonEmpty(labels[binding.Platform], binding.Label))
 		out = append(out, binding)
 	}
 	return out
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func stringList(values []string) []string {

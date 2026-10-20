@@ -10,6 +10,8 @@ type AIConfig = configmodel.AIConfig
 type AIExecution = configmodel.AIExecution
 type AIEmployee = configmodel.AIEmployee
 type AIEmployeeBinding = configmodel.AIEmployeeBinding
+type AIEmployeeExecution = configmodel.AIEmployeeExecution
+type HistoryDiagnostics = configmodel.HistoryDiagnostics
 type Delivery = configmodel.Delivery
 
 type RealtimePublisher interface {

@@ -2,6 +2,7 @@ package http
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
@@ -74,18 +75,43 @@ func (a *AIAPI) DeleteEmployee(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", map[string]any{"employeeId": ctx.Param("id")})
 }
 
-func (a *AIAPI) ListEmployeeAccounts(ctx httpapi.Context) {
+func (a *AIAPI) ListEmployeeExecutions(ctx httpapi.Context) {
 	principal, ok := employeePrincipal(ctx)
 	if !ok {
 		return
 	}
-	items, err := a.Service.ListEmployeeAccounts(ctx.Context(), principal.TenantID)
+	limit := 0
+	if raw := strings.TrimSpace(ctx.Query("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", "limit 不正确")
+			return
+		}
+		limit = parsed
+	}
+	items, err := a.Service.ListEmployeeExecutions(ctx.Context(), principal.AccountKey, ctx.Param("id"), limit)
 	if err != nil {
 		writeServiceError(ctx, err)
 		return
 	}
 	if items == nil {
-		items = []service.AccountBinding{}
+		items = []service.EmployeeExecutionView{}
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", items)
+}
+
+func (a *AIAPI) ListEmployeeChannels(ctx httpapi.Context) {
+	principal, ok := employeePrincipal(ctx)
+	if !ok {
+		return
+	}
+	items, err := a.Service.ListEmployeeChannels(ctx.Context(), principal.TenantID)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	if items == nil {
+		items = []service.ChannelBinding{}
 	}
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", items)
 }
@@ -93,10 +119,11 @@ func (a *AIAPI) ListEmployeeAccounts(ctx httpapi.Context) {
 func (a *AIAPI) EmployeeRoutes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/ai")
 	routes.Get("/employees", a.ListEmployees)
+	routes.Get("/employees/:id/executions", a.ListEmployeeExecutions)
 	routes.Post("/employees", a.CreateEmployee)
 	routes.Patch("/employees/:id", a.UpdateEmployee)
 	routes.Delete("/employees/:id", a.DeleteEmployee)
-	routes.Get("/employee-accounts", a.ListEmployeeAccounts)
+	routes.Get("/employee-channels", a.ListEmployeeChannels)
 	return routes
 }
 

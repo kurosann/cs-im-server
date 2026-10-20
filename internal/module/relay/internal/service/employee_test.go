@@ -19,7 +19,7 @@ func setupEmployees(t *testing.T) *RelayService {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	store.RegisterRelationDB("main", store.RelationStore{DB: db.DB, Closer: db})
-	if err := db.AutoMigrate(&Channel{}, &AIEmployee{}, &AIEmployeeBinding{}, &businessAppRow{}); err != nil {
+	if err := db.AutoMigrate(&Channel{}, &AIEmployee{}, &AIEmployeeBinding{}, &AIEmployeeExecution{}, &businessAppRow{}); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
 	return NewRelayService(realtimePublisherStub{})
@@ -42,8 +42,7 @@ func TestAIEmployeeAccountCRUD(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create other app: %v", err)
 	}
-	channel, err := service.CreateChannel(ctx, relaydto.CreateChannelRequest{Name: "官网转发", Type: "web"})
-	if err != nil {
+	if _, err := service.CreateChannel(ctx, relaydto.CreateChannelRequest{Name: "官网转发", Type: "web"}); err != nil {
 		t.Fatalf("create channel: %v", err)
 	}
 
@@ -56,7 +55,7 @@ func TestAIEmployeeAccountCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateEmployee() error = %v", err)
 	}
-	if created.EmployeeID == "" || created.Name != "新 AI 客服员工" || created.Status != "paused" || created.Mode != "basic" || created.Prompt != "" || created.History != 10 || !created.AutoReply || len(created.AccountBindings) != 0 {
+	if created.EmployeeID == "" || created.Name != "新 AI 客服员工" || created.Status != "paused" || created.Mode != "basic" || created.Prompt != "" || created.History != 10 || !created.AutoReply || len(created.Channels) != 0 {
 		t.Fatalf("CreateEmployee() = %+v", created)
 	}
 
@@ -72,27 +71,35 @@ func TestAIEmployeeAccountCRUD(t *testing.T) {
 		t.Fatalf("other account list = %+v, %v", hidden, err)
 	}
 
-	accounts, err := service.ListEmployeeAccounts(ctx, "tenant-a")
-	if err != nil {
-		t.Fatalf("ListEmployeeAccounts() error = %v", err)
+	if err := service.apps.Create(ctx, &businessAppRow{
+		AppKey: "app_sales_2", TenantID: "tenant-a", DisplayName: "售后业务", Kind: "whatsapp",
+	}); err != nil {
+		t.Fatalf("create second app: %v", err)
 	}
-	if !hasAccount(accounts, "whatsapp", "app_sales") || !hasAccount(accounts, "web", channel.ChannelKey) || hasAccount(accounts, "telegram", "app_other") {
-		t.Fatalf("ListEmployeeAccounts() = %+v", accounts)
+	channels, err := service.ListEmployeeChannels(ctx, "tenant-a")
+	if err != nil {
+		t.Fatalf("ListEmployeeChannels() error = %v", err)
+	}
+	if len(channels) != 2 || !hasChannel(channels, "whatsapp") || !hasChannel(channels, "web") || hasChannel(channels, "telegram") {
+		t.Fatalf("ListEmployeeChannels() = %+v", channels)
+	}
+	if label := channelLabelOf(channels, "whatsapp"); label != "WhatsApp" {
+		t.Fatalf("whatsapp label = %q", label)
 	}
 
 	updated, err := service.UpdateEmployee(ctx, "account-a", "tenant-a", created.EmployeeID, UpdateEmployeeRequest{
 		Name: "售后专员", Persona: "耐心", Status: "running", Mode: "professional", Prompt: "只回答售后问题",
 		History: 15, AutoReply: false, SelectedDocIDs: []string{"d3", "d3"}, Tools: []string{"查询订单"},
-		AccountBindings: []AccountBinding{{Platform: "WhatsApp", AccountKey: "app_sales"}, {Platform: "web", AccountKey: channel.ChannelKey}},
+		Channels: []ChannelBinding{{Platform: "WhatsApp"}, {Platform: "web"}},
 	})
 	if err != nil {
 		t.Fatalf("UpdateEmployee() error = %v", err)
 	}
-	if updated.Name != "售后专员" || updated.Status != "running" || updated.AutoReply || len(updated.SelectedDocIDs) != 1 || len(updated.AccountBindings) != 2 {
+	if updated.Name != "售后专员" || updated.Status != "running" || updated.AutoReply || len(updated.SelectedDocIDs) != 1 || len(updated.Channels) != 2 {
 		t.Fatalf("UpdateEmployee() = %+v", updated)
 	}
 	stored, err := service.ListEmployees(ctx, "account-a", "tenant-a")
-	if err != nil || len(stored) != 1 || stored[0].Prompt != "只回答售后问题" || len(stored[0].SelectedDocIDs) != 1 || stored[0].SelectedDocIDs[0] != "d3" || stored[0].AutoReply || len(stored[0].AccountBindings) != 2 {
+	if err != nil || len(stored) != 1 || stored[0].Prompt != "只回答售后问题" || len(stored[0].SelectedDocIDs) != 1 || stored[0].SelectedDocIDs[0] != "d3" || stored[0].AutoReply || len(stored[0].Channels) != 2 {
 		t.Fatalf("stored employee = %+v, %v", stored, err)
 	}
 
@@ -107,13 +114,13 @@ func TestAIEmployeeAccountCRUD(t *testing.T) {
 	}
 	if _, err := service.UpdateEmployee(ctx, "account-a", "tenant-a", second.EmployeeID, UpdateEmployeeRequest{
 		Name: "售前助手", Status: "paused", Mode: "basic", History: 10,
-		AccountBindings: []AccountBinding{{Platform: "whatsapp", AccountKey: "app_sales"}},
+		Channels: []ChannelBinding{{Platform: "whatsapp"}},
 	}); !isStatus(err, 409) {
 		t.Fatalf("binding conflict error = %v", err)
 	}
 	if _, err := service.UpdateEmployee(ctx, "account-a", "tenant-a", second.EmployeeID, UpdateEmployeeRequest{
 		Name: "售前助手", Status: "paused", Mode: "basic", History: 10,
-		AccountBindings: []AccountBinding{{Platform: "telegram", AccountKey: "app_other"}},
+		Channels: []ChannelBinding{{Platform: "telegram"}},
 	}); !isStatus(err, 400) {
 		t.Fatalf("unknown account error = %v", err)
 	}
@@ -139,20 +146,57 @@ func TestAIEmployeeAccountCRUD(t *testing.T) {
 	}
 	rebound, err := service.UpdateEmployee(ctx, "account-a", "tenant-a", recreated.EmployeeID, UpdateEmployeeRequest{
 		Name: "售后专员", Status: "paused", Mode: "basic", History: 10,
-		AccountBindings: []AccountBinding{{Platform: "whatsapp", AccountKey: "app_sales"}},
+		Channels: []ChannelBinding{{Platform: "whatsapp"}},
 	})
-	if err != nil || len(rebound.AccountBindings) != 1 || rebound.AccountBindings[0].Label != "售前业务" {
+	if err != nil || len(rebound.Channels) != 1 || rebound.Channels[0].Label != "WhatsApp" {
 		t.Fatalf("rebind after delete = %+v, %v", rebound, err)
 	}
 }
 
-func hasAccount(items []AccountBinding, platform, accountKey string) bool {
+func TestEmployeeChannelsCollapseLegacyAccountRows(t *testing.T) {
+	ctx := context.Background()
+	service := setupEmployees(t)
+	if err := service.apps.Create(ctx, &businessAppRow{
+		AppKey: "app_sales", TenantID: "tenant-a", DisplayName: "售前业务", Kind: "WhatsApp",
+	}); err != nil {
+		t.Fatalf("create app: %v", err)
+	}
+	created, err := service.CreateEmployee(ctx, "account-a", CreateEmployeeRequest{Name: "售后专员"})
+	if err != nil {
+		t.Fatalf("CreateEmployee() error = %v", err)
+	}
+	for _, accountKey := range []string{"app_sales", "app_sales_2"} {
+		if err := service.bindings.Create(ctx, &AIEmployeeBinding{
+			AccountKey:      "account-a",
+			EmployeeKey:     created.EmployeeID,
+			Platform:        "whatsapp",
+			BoundAccountKey: accountKey,
+		}); err != nil {
+			t.Fatalf("create legacy binding: %v", err)
+		}
+	}
+	stored, err := service.ListEmployees(ctx, "account-a", "tenant-a")
+	if err != nil || len(stored) != 1 || len(stored[0].Channels) != 1 || stored[0].Channels[0].Platform != "whatsapp" || stored[0].Channels[0].Label != "WhatsApp" {
+		t.Fatalf("collapsed channels = %+v, %v", stored, err)
+	}
+}
+
+func hasChannel(items []ChannelBinding, platform string) bool {
 	for _, item := range items {
-		if item.Platform == platform && item.AccountKey == accountKey {
+		if item.Platform == platform {
 			return true
 		}
 	}
 	return false
+}
+
+func channelLabelOf(items []ChannelBinding, platform string) string {
+	for _, item := range items {
+		if item.Platform == platform {
+			return item.Label
+		}
+	}
+	return ""
 }
 
 func isStatus(err error, status int) bool {

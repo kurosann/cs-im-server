@@ -18,6 +18,7 @@ type RelayService struct {
 	aiConfigAccessor dataaccess.DataAccessor[*AIConfig]
 	employees        dataaccess.DataAccessor[*AIEmployee]
 	bindings         dataaccess.DataAccessor[*AIEmployeeBinding]
+	executions       dataaccess.DataAccessor[*AIEmployeeExecution]
 	apps             dataaccess.DataAccessor[*businessAppRow]
 	channels         map[string]*Channel
 	webhooks         map[string]*Webhook

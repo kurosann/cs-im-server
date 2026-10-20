@@ -38,6 +38,7 @@ func (m *Module) Model() []commonmodule.ModelRegInfo {
 		commonmodule.NewModelRegInfo(&relaymodel.AIExecution{}),
 		commonmodule.NewModelRegInfo(&relaymodel.AIEmployee{}),
 		commonmodule.NewModelRegInfo(&relaymodel.AIEmployeeBinding{}),
+		commonmodule.NewModelRegInfo(&relaymodel.AIEmployeeExecution{}),
 		commonmodule.NewModelRegInfo(&relaymodel.Delivery{}),
 	}
 }
