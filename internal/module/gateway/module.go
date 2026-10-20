@@ -2,12 +2,13 @@ package gateway
 
 import (
 	"context"
+	iamhttp "cs-im-server/internal/module/iam/pkg/http"
 
 	"cs-im-server/internal/module/gateway/internal/api"
 	"cs-im-server/internal/module/gateway/internal/model"
 	gatewayruntime "cs-im-server/internal/module/gateway/internal/runtime"
 	"cs-im-server/internal/module/gateway/internal/service"
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 
 	commonmodule "vane-common/module"
 )
@@ -69,7 +70,11 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	)
 
 	return commonmodule.HttpApiInfo{
-		Handlers:    adminGroup.Handlers(),
-		Middlewares: []commonmodule.HttpMiddleware{iampkg.AccountTokenMiddleware()},
+		Handlers: adminGroup.Handlers(),
+		Middlewares: []commonmodule.HttpMiddleware{
+			iamhttp.AccountTokenMiddleware(),
+			iamhttp.RequirePrincipalKind(iampkg.PrincipalKindHuman),
+			iamhttp.RequirePrincipalScope(iampkg.ScopeGatewayAdmin),
+		},
 	}
 }

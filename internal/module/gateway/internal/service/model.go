@@ -3,8 +3,9 @@ package service
 import (
 	"context"
 
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	"cs-im-server/internal/module/gateway/internal/model"
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	relaypkg "cs-im-server/internal/module/relay/pkg"
 )
 
@@ -26,11 +27,7 @@ type ConversationRetargeter interface {
 	RetargetCustomer(sourceID, targetID string) error
 }
 
-type MessageRef struct {
-	MessageKey string
-}
-
 type MessageStore interface {
-	Get(ctx context.Context, id string) (MessageRef, error)
-	Latest(ctx context.Context, conversationID string) (MessageRef, error)
+	Get(ctx context.Context, id string) (gatewaydto.MessageRef, error)
+	Latest(ctx context.Context, conversationID string) (gatewaydto.MessageRef, error)
 }

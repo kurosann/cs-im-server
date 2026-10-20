@@ -1,10 +1,11 @@
 package http
 
 import (
+	iamhttp "cs-im-server/internal/module/iam/pkg/http"
 	"net/http"
 
 	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	"cs-im-server/pkg/httpapi"
 	"cs-im-server/pkg/seqquery"
 	"cs-im-server/pkg/sse"
@@ -96,7 +97,7 @@ func (a *RelayMessageAPI) History(ctx httpapi.Context) {
 func (a *RelayMessageAPI) Routes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup(
 		"/api/v1/relays",
-		commonmodule.WithGroupMiddlewares(iampkg.RequirePrincipalKind(iampkg.PrincipalKindRelay)),
+		commonmodule.WithGroupMiddlewares(iamhttp.RequirePrincipalKind(iampkg.PrincipalKindRelay)),
 	)
 	routes.Post("/messages", a.Send)
 	routes.Get("/conversations/:conversationId/messages", a.History)

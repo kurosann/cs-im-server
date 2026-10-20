@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	"cs-im-server/internal/module/relay/internal/service"
 	"cs-im-server/pkg/httpapi"
 	commonmodule "vane-common/module"

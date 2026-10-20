@@ -11,3 +11,5 @@ func notFound(format string, args ...any) *Error { return apperr.NotFound(format
 func unauthorized(format string, args ...any) *Error { return apperr.Unauthorized(format, args...) }
 
 func forbidden(format string, args ...any) *Error { return apperr.Forbidden(format, args...) }
+
+func conflict(format string, args ...any) *Error { return apperr.New(409, "CONFLICT", format, args...) }

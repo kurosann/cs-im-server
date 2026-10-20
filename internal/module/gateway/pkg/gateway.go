@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	"cs-im-server/internal/module/gateway/internal/model"
 	gatewayruntime "cs-im-server/internal/module/gateway/internal/runtime"
 	"cs-im-server/internal/module/gateway/internal/service"
@@ -8,27 +9,27 @@ import (
 
 type (
 	App                = model.App
-	RegisterAppRequest = service.RegisterAppRequest
-	HeartbeatRequest   = service.HeartbeatRequest
+	RegisterAppRequest = gatewaydto.RegisterAppRequest
+	HeartbeatRequest   = gatewaydto.HeartbeatRequest
 
 	Customer         = model.Customer
 	CustomerIdentity = model.CustomerIdentity
 
 	Conversation               = model.Conversation
-	CreateConversationRequest  = service.CreateConversationRequest
-	AssignConversationRequest  = service.AssignConversationRequest
-	CloseConversationRequest   = service.CloseConversationRequest
-	ForwardConversationRequest = service.ForwardConversationRequest
-	EnsureConversationRequest  = service.EnsureConversationRequest
+	CreateConversationRequest  = gatewaydto.CreateConversationRequest
+	AssignConversationRequest  = gatewaydto.AssignConversationRequest
+	CloseConversationRequest   = gatewaydto.CloseConversationRequest
+	ForwardConversationRequest = gatewaydto.ForwardConversationRequest
+	EnsureConversationRequest  = gatewaydto.EnsureConversationRequest
 
 	Message                    = model.Message
 	MessageSender              = model.MessageSender
 	MessageSource              = model.MessageSource
 	MessageMedia               = model.MessageMedia
-	CreateMessageRequest       = service.CreateMessageRequest
-	UpdateMessageStatusRequest = service.UpdateMessageStatusRequest
-	MessageHistoryFilter       = service.MessageHistoryFilter
-	MessageHistoryPage         = service.MessageHistoryPage
+	CreateMessageRequest       = gatewaydto.CreateMessageRequest
+	UpdateMessageStatusRequest = gatewaydto.UpdateMessageStatusRequest
+	MessageHistoryFilter       = gatewaydto.MessageHistoryFilter
+	MessageHistoryPage         = gatewaydto.MessageHistoryPage
 
 	RealtimeEvent = service.RealtimeEvent
 )

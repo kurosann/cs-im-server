@@ -1,6 +1,7 @@
 package api
 
 import (
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	"net/http"
 
 	"cs-im-server/internal/module/gateway/internal/service"
@@ -17,7 +18,7 @@ func NewCustomerAPI(customerService *service.CustomerService) *CustomerAPI {
 }
 
 func (a *CustomerAPI) Create(ctx httpapi.Context) {
-	var req service.CreateCustomerRequest
+	var req gatewaydto.CreateCustomerRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
@@ -40,7 +41,7 @@ func (a *CustomerAPI) Get(ctx httpapi.Context) {
 }
 
 func (a *CustomerAPI) AddIdentity(ctx httpapi.Context) {
-	var req service.AddIdentityRequest
+	var req gatewaydto.AddIdentityRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
@@ -54,7 +55,7 @@ func (a *CustomerAPI) AddIdentity(ctx httpapi.Context) {
 }
 
 func (a *CustomerAPI) Merge(ctx httpapi.Context) {
-	var req service.MergeCustomerRequest
+	var req gatewaydto.MergeCustomerRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return

@@ -3,8 +3,10 @@ module cs-im-server
 go 1.25.0
 
 require (
+	github.com/gin-gonic/gin v1.12.0
 	github.com/kurosann/cs-im-internal-sdk v0.0.0-00010101000000-000000000000
 	github.com/kurosann/cs-im-sdk v0.0.0-00010101000000-000000000000
+	golang.org/x/crypto v0.51.0
 	google.golang.org/grpc v1.75.1
 	google.golang.org/protobuf v1.36.10
 	gopkg.in/yaml.v3 v3.0.1
@@ -34,7 +36,6 @@ require (
 	github.com/fengxuway/shadowsocksR v0.0.0-20200512060103-8ecc11ae8def // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
-	github.com/gin-gonic/gin v1.12.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-ping/ping v1.2.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
@@ -94,7 +95,6 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/arch v0.22.0 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect

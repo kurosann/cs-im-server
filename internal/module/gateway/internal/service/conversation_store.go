@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 )
 
 type ConversationMessageStore struct {
@@ -12,20 +13,20 @@ func NewConversationMessageStore(messages *MessageService) *ConversationMessageS
 	return &ConversationMessageStore{messages: messages}
 }
 
-func (s *ConversationMessageStore) Get(ctx context.Context, id string) (MessageRef, error) {
+func (s *ConversationMessageStore) Get(ctx context.Context, id string) (gatewaydto.MessageRef, error) {
 	message, err := s.messages.Get(ctx, id)
 	if err != nil {
-		return MessageRef{}, err
+		return gatewaydto.MessageRef{}, err
 	}
-	return MessageRef{MessageKey: message.MessageKey}, nil
+	return gatewaydto.MessageRef{MessageKey: message.MessageKey}, nil
 }
 
-func (s *ConversationMessageStore) Latest(ctx context.Context, conversationID string) (MessageRef, error) {
+func (s *ConversationMessageStore) Latest(ctx context.Context, conversationID string) (gatewaydto.MessageRef, error) {
 	message, err := s.messages.Latest(ctx, conversationID)
 	if err != nil {
-		return MessageRef{}, err
+		return gatewaydto.MessageRef{}, err
 	}
-	return MessageRef{MessageKey: message.MessageKey}, nil
+	return gatewaydto.MessageRef{MessageKey: message.MessageKey}, nil
 }
 
 var _ MessageStore = (*ConversationMessageStore)(nil)

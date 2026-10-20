@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	relaydto "cs-im-server/internal/module/relay/dto"
+
 	"vane-common/pkg/dataaccess/store"
 	"vane-common/pkg/sqlitedb"
 )
@@ -40,7 +42,7 @@ func TestAIEmployeeAccountCRUD(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create other app: %v", err)
 	}
-	channel, err := service.CreateChannel(ctx, CreateChannelRequest{Name: "官网转发", Type: "web"})
+	channel, err := service.CreateChannel(ctx, relaydto.CreateChannelRequest{Name: "官网转发", Type: "web"})
 	if err != nil {
 		t.Fatalf("create channel: %v", err)
 	}

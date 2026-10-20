@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	"cs-im-server/pkg/httpapi"
 	"cs-im-server/pkg/seqquery"
 	commonmodule "vane-common/module"

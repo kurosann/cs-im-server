@@ -10,7 +10,7 @@ import (
 	"vane-common/pkg/dataaccess"
 	"vane-common/pkg/idutil"
 
-	"cs-im-server/pkg/seqquery"
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 )
 
 type MessageService struct {
@@ -24,36 +24,13 @@ type MessageService struct {
 	realtime        *RealtimeService
 }
 
-type CreateMessageRequest struct {
-	ConversationKey string        `json:"conversationId"`
-	CustomerID      string        `json:"customerId"`
-	Sender          MessageSender `json:"sender"`
-	Source          MessageSource `json:"source"`
-	Type            string        `json:"type"`
-	Text            string        `json:"text"`
-	Content         *MessageMedia `json:"content"`
-}
-
-type UpdateMessageStatusRequest struct {
-	Status string `json:"status"`
-}
-
-type MessageHistoryFilter = seqquery.Filter
-
-type MessageHistoryPage struct {
-	Items         []Message `json:"items"`
-	NextAfterSeq  int64     `json:"nextAfterSeq"`
-	NextBeforeSeq int64     `json:"nextBeforeSeq"`
-	HasMore       bool      `json:"hasMore"`
-}
-
 var messageStatuses = map[string]bool{
 	"received": true, "sent": true, "delivered": true, "read": true, "failed": true,
 }
 
 var supportedMessageTypes = map[string]bool{"text": true, "image": true, "file": true, "video": true}
 
-func validateMessage(req *CreateMessageRequest) error {
+func validateMessage(req *gatewaydto.CreateMessageRequest) error {
 	if req.Type == "" {
 		req.Type = "text"
 	}
@@ -95,7 +72,7 @@ func messageSourceDedupKey(appID, externalID string) string {
 	return appID + ":" + externalID
 }
 
-func (s *MessageService) Create(_ context.Context, req CreateMessageRequest) (Message, error) {
+func (s *MessageService) Create(_ context.Context, req gatewaydto.CreateMessageRequest) (Message, error) {
 	if req.ConversationKey == "" {
 		return Message{}, badRequest("conversationId is required")
 	}
@@ -156,7 +133,7 @@ func (s *MessageService) Create(_ context.Context, req CreateMessageRequest) (Me
 	return result, nil
 }
 
-func (s *MessageService) CreateChannelMessage(_ context.Context, appID string, req CreateMessageRequest) (Message, error) {
+func (s *MessageService) CreateChannelMessage(_ context.Context, appID string, req gatewaydto.CreateMessageRequest) (Message, error) {
 	if req.Source.ExternalID == "" {
 		return Message{}, badRequest("source.externalId is required")
 	}
@@ -186,7 +163,7 @@ func (s *MessageService) CreateChannelMessage(_ context.Context, appID string, r
 	return s.Create(context.Background(), req)
 }
 
-func (s *MessageService) CreateRelayMessage(_ context.Context, relayID string, req CreateMessageRequest) (Message, error) {
+func (s *MessageService) CreateRelayMessage(_ context.Context, relayID string, req gatewaydto.CreateMessageRequest) (Message, error) {
 	if relayID == "" {
 		return Message{}, forbidden("relay identity is required")
 	}
@@ -216,12 +193,12 @@ func (s *MessageService) RelayEventAllowed(event RealtimeEvent) bool {
 	return ok && message.SenderRole == "customer"
 }
 
-func (s *MessageService) RelayHistory(_ context.Context, conversationID string, filter MessageHistoryFilter) (MessageHistoryPage, error) {
+func (s *MessageService) RelayHistory(_ context.Context, conversationID string, filter gatewaydto.MessageHistoryFilter) (gatewaydto.MessageHistoryPage, error) {
 	if filter.Order == "" {
 		filter.Order = "desc"
 	}
 	if filter.Order != "asc" && filter.Order != "desc" {
-		return MessageHistoryPage{}, badRequest("order must be asc or desc")
+		return gatewaydto.MessageHistoryPage{}, badRequest("order must be asc or desc")
 	}
 	if filter.Limit <= 0 {
 		filter.Limit = 50
@@ -230,10 +207,10 @@ func (s *MessageService) RelayHistory(_ context.Context, conversationID string, 
 		filter.Limit = 100
 	}
 	if filter.AfterSeq > 0 && filter.BeforeSeq > 0 && filter.AfterSeq >= filter.BeforeSeq {
-		return MessageHistoryPage{}, badRequest("afterSeq must be less than beforeSeq")
+		return gatewaydto.MessageHistoryPage{}, badRequest("afterSeq must be less than beforeSeq")
 	}
 	if _, err := s.conversations.Get(context.Background(), conversationID); err != nil {
-		return MessageHistoryPage{}, err
+		return gatewaydto.MessageHistoryPage{}, err
 	}
 	messages := s.List(context.Background(), conversationID, filter.AfterSeq, filter.BeforeSeq, 0)
 	if filter.Order == "desc" {
@@ -241,7 +218,7 @@ func (s *MessageService) RelayHistory(_ context.Context, conversationID string, 
 			messages[i], messages[j] = messages[j], messages[i]
 		}
 	}
-	page := MessageHistoryPage{Items: make([]Message, 0, filter.Limit)}
+	page := gatewaydto.MessageHistoryPage{Items: make([]Message, 0, filter.Limit)}
 	hasMore := len(messages) > filter.Limit
 	if hasMore {
 		messages = messages[:filter.Limit]
@@ -259,7 +236,7 @@ func (s *MessageService) RelayHistory(_ context.Context, conversationID string, 
 	return page, nil
 }
 
-func (s *MessageService) UpdateStatus(_ context.Context, id string, req UpdateMessageStatusRequest) (Message, error) {
+func (s *MessageService) UpdateStatus(_ context.Context, id string, req gatewaydto.UpdateMessageStatusRequest) (Message, error) {
 	if !messageStatuses[req.Status] {
 		return Message{}, badRequest("unsupported message status %s", req.Status)
 	}
@@ -321,12 +298,12 @@ func (s *MessageService) List(_ context.Context, conversationID string, afterSeq
 	return messages
 }
 
-func (s *MessageService) History(_ context.Context, appID, conversationID string, filter MessageHistoryFilter) (MessageHistoryPage, error) {
+func (s *MessageService) History(_ context.Context, appID, conversationID string, filter gatewaydto.MessageHistoryFilter) (gatewaydto.MessageHistoryPage, error) {
 	if filter.Order == "" {
 		filter.Order = "desc"
 	}
 	if filter.Order != "asc" && filter.Order != "desc" {
-		return MessageHistoryPage{}, badRequest("order must be asc or desc")
+		return gatewaydto.MessageHistoryPage{}, badRequest("order must be asc or desc")
 	}
 	if filter.Limit <= 0 {
 		filter.Limit = 50
@@ -335,17 +312,17 @@ func (s *MessageService) History(_ context.Context, appID, conversationID string
 		filter.Limit = 100
 	}
 	if filter.AfterSeq > 0 && filter.BeforeSeq > 0 && filter.AfterSeq >= filter.BeforeSeq {
-		return MessageHistoryPage{}, badRequest("afterSeq must be less than beforeSeq")
+		return gatewaydto.MessageHistoryPage{}, badRequest("afterSeq must be less than beforeSeq")
 	}
 	if _, err := s.apps.Get(context.Background(), appID); err != nil {
-		return MessageHistoryPage{}, err
+		return gatewaydto.MessageHistoryPage{}, err
 	}
 	conversation, err := s.conversations.Get(context.Background(), conversationID)
 	if err != nil {
-		return MessageHistoryPage{}, err
+		return gatewaydto.MessageHistoryPage{}, err
 	}
 	if conversation.AppKey != appID {
-		return MessageHistoryPage{}, notFound("conversation %s not found", conversationID)
+		return gatewaydto.MessageHistoryPage{}, notFound("conversation %s not found", conversationID)
 	}
 	messages := s.List(context.Background(), conversationID, filter.AfterSeq, filter.BeforeSeq, 0)
 	if filter.Order == "desc" {
@@ -353,7 +330,7 @@ func (s *MessageService) History(_ context.Context, appID, conversationID string
 			messages[i], messages[j] = messages[j], messages[i]
 		}
 	}
-	page := MessageHistoryPage{Items: make([]Message, 0, filter.Limit)}
+	page := gatewaydto.MessageHistoryPage{Items: make([]Message, 0, filter.Limit)}
 	hasMore := len(messages) > filter.Limit
 	if hasMore {
 		messages = messages[:filter.Limit]
@@ -373,7 +350,7 @@ func (s *MessageService) History(_ context.Context, appID, conversationID string
 	return page, nil
 }
 
-func (s *MessageService) HistoryForApp(ctx context.Context, appID, conversationID string, filter MessageHistoryFilter) (any, error) {
+func (s *MessageService) HistoryForApp(ctx context.Context, appID, conversationID string, filter gatewaydto.MessageHistoryFilter) (any, error) {
 	page, err := s.History(ctx, appID, conversationID, filter)
 	if err != nil {
 		return nil, err

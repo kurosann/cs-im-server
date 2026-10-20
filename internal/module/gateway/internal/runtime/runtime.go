@@ -2,11 +2,12 @@ package runtime
 
 import (
 	"context"
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	"sync"
 
 	"cs-im-server/internal/module/gateway/internal/model"
 	"cs-im-server/internal/module/gateway/internal/service"
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 )
 
 type AppAuthorizer interface {
@@ -14,19 +15,19 @@ type AppAuthorizer interface {
 }
 
 type ConversationIngress interface {
-	Ensure(ctx context.Context, appID string, req service.EnsureConversationRequest) (model.Conversation, bool, error)
+	Ensure(ctx context.Context, appID string, req gatewaydto.EnsureConversationRequest) (model.Conversation, bool, error)
 	Get(ctx context.Context, id string) (model.Conversation, error)
 }
 
 type MessageIngress interface {
-	CreateChannelMessage(ctx context.Context, appID string, req service.CreateMessageRequest) (model.Message, error)
-	History(ctx context.Context, appID, conversationID string, filter service.MessageHistoryFilter) (service.MessageHistoryPage, error)
+	CreateChannelMessage(ctx context.Context, appID string, req gatewaydto.CreateMessageRequest) (model.Message, error)
+	History(ctx context.Context, appID, conversationID string, filter gatewaydto.MessageHistoryFilter) (gatewaydto.MessageHistoryPage, error)
 	ChannelEventAllowed(appID string, event service.RealtimeEvent) bool
 }
 
 type MessageEgress interface {
-	CreateRelayMessage(ctx context.Context, relayID string, req service.CreateMessageRequest) (model.Message, error)
-	RelayHistory(ctx context.Context, conversationID string, filter service.MessageHistoryFilter) (service.MessageHistoryPage, error)
+	CreateRelayMessage(ctx context.Context, relayID string, req gatewaydto.CreateMessageRequest) (model.Message, error)
+	RelayHistory(ctx context.Context, conversationID string, filter gatewaydto.MessageHistoryFilter) (gatewaydto.MessageHistoryPage, error)
 	RelayEventAllowed(event service.RealtimeEvent) bool
 }
 

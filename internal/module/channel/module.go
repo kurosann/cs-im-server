@@ -2,11 +2,12 @@ package channel
 
 import (
 	"context"
+	iamhttp "cs-im-server/internal/module/iam/pkg/http"
 
 	"cs-im-server/internal/module/channel/internal/grpc"
 	"cs-im-server/internal/module/channel/internal/http"
 	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
-	iampkg "cs-im-server/internal/module/iam/pkg"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	gatewayv1 "github.com/kurosann/cs-im-sdk/gateway/v1"
 	commonmodule "vane-common/module"
 )
@@ -44,7 +45,11 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	)
 	routes := commonmodule.NewHttpRouteGroup("/api/v1").Compose(channelHTTP.Routes())
 	return commonmodule.HttpApiInfo{
-		Handlers:    routes.Handlers(),
-		Middlewares: []commonmodule.HttpMiddleware{iampkg.AccountTokenMiddleware()},
+		Handlers: routes.Handlers(),
+		Middlewares: []commonmodule.HttpMiddleware{
+			iamhttp.AccountTokenMiddleware(),
+			iamhttp.RequirePrincipalKind(iampkg.PrincipalKindBusiness),
+			iamhttp.RequirePrincipalScope(iampkg.ScopeChannelAccess),
+		},
 	}
 }

@@ -11,61 +11,32 @@ import (
 	"strings"
 	"time"
 
+	iamdto "cs-im-server/internal/module/iam/dto"
 	"cs-im-server/internal/module/iam/internal/model"
+	iamprincipal "cs-im-server/internal/module/iam/pkg/principal"
 
 	"vane-common/pkg/dataaccess"
 )
 
 const (
 	ScopeAll            = "*"
+	ScopeGatewayAdmin   = "gateway:admin"
 	ScopeIAMTokenManage = "iam:token:manage"
+	ScopeIAMUserManage  = "iam:user:manage"
+	ScopeIAMRoleManage  = "iam:role:manage"
 	ScopeChannelAccess  = "channel:access"
 	ScopeRelayAccess    = "relay:access"
 )
 
-type Principal struct {
-	AccountKey string
-	TenantID   string
-	Kind       string
-	Scopes     []string
-}
-
-type PrincipalContextKey struct{}
-
-var ErrPrincipalMissing = errors.New("principal is missing")
-
 type AccountService struct {
 	accessor          dataaccess.DataAccessor[*model.AccountToken]
+	credentials       dataaccess.DataAccessor[*model.ChannelCredential]
+	users             dataaccess.DataAccessor[*model.User]
+	roles             dataaccess.DataAccessor[*model.Role]
+	audit             *AuditService
 	bootstrapToken    string
 	relayToken        string
 	bootstrapTenantID string
-}
-
-type AccountTokenInfo struct {
-	TokenKey   string     `json:"tokenKey"`
-	AccountKey string     `json:"accountKey"`
-	Name       string     `json:"name"`
-	TenantID   string     `json:"tenantId"`
-	Kind       string     `json:"kind"`
-	Scopes     []string   `json:"scopes"`
-	Status     string     `json:"status"`
-	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
-	RevokedAt  *time.Time `json:"revokedAt,omitempty"`
-	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
-}
-
-type IssueAccountTokenRequest struct {
-	AccountKey string     `json:"accountKey"`
-	Name       string     `json:"name"`
-	TenantID   string     `json:"tenantId"`
-	Kind       string     `json:"kind"`
-	Scopes     []string   `json:"scopes"`
-	ExpiresAt  *time.Time `json:"expiresAt"`
-}
-
-type IssueAccountTokenResult struct {
-	Token  AccountTokenInfo `json:"token"`
-	Secret string           `json:"secret"`
 }
 
 func NewAccountService(bootstrapToken, tenantID string, relayToken ...string) *AccountService {
@@ -75,19 +46,19 @@ func NewAccountService(bootstrapToken, tenantID string, relayToken ...string) *A
 	}
 	return &AccountService{
 		accessor:          dataaccess.DataAccessor[*model.AccountToken]{},
+		roles:             dataaccess.DataAccessor[*model.Role]{},
+		audit:             NewAuditService(),
 		bootstrapToken:    bootstrapToken,
 		relayToken:        relayTokenValue,
 		bootstrapTenantID: tenantID,
 	}
 }
 
-func WithPrincipal(ctx context.Context, principal Principal) context.Context {
-	return context.WithValue(ctx, PrincipalContextKey{}, principal)
-}
-
-func PrincipalFromContext(ctx context.Context) (Principal, bool) {
-	principal, ok := ctx.Value(PrincipalContextKey{}).(Principal)
-	return principal, ok
+func (s *AccountService) recordAudit(ctx context.Context, principal iamprincipal.Principal, event, action, object, result string) {
+	if s.audit == nil {
+		return
+	}
+	s.audit.Record(ctx, principal, iamdto.AuditEntry{Event: event, Action: action, Object: object, Result: result})
 }
 
 func hashToken(token string) string {
@@ -95,86 +66,161 @@ func hashToken(token string) string {
 	return hex.EncodeToString(digest[:])
 }
 
-func (s *AccountService) Authenticate(_ context.Context, token string) (Principal, error) {
+func (s *AccountService) Authenticate(_ context.Context, token string) (iamprincipal.Principal, error) {
 	if token == "" {
-		return Principal{}, unauthorized("account token is required")
-	}
-	item, err := s.accessor.First(context.Background(), dataaccess.Eq("token_hash", hashToken(token)))
-	if err != nil && !errors.Is(err, dataaccess.ErrDataNotFound) {
-		return Principal{}, err
+		return iamprincipal.Principal{}, unauthorized("account token is required")
 	}
 	now := time.Now()
-	if err == nil {
+	item, err := s.accessor.First(context.Background(), dataaccess.Eq("token_hash", hashToken(token)))
+	if err != nil && !errors.Is(err, dataaccess.ErrDataNotFound) {
+		return iamprincipal.Principal{}, err
+	}
+	credential, err := s.credentials.First(context.Background(), dataaccess.Eq("secret_hash", hashToken(token)))
+	if err != nil && !errors.Is(err, dataaccess.ErrDataNotFound) {
+		return iamprincipal.Principal{}, err
+	}
+	if credential != nil {
+		if credential.Status != "active" {
+			return iamprincipal.Principal{}, forbidden("channel credential is disabled or revoked")
+		}
+		if credential.ExpiresAt != nil && credential.ExpiresAt.Before(now) {
+			return iamprincipal.Principal{}, forbidden("channel credential is expired")
+		}
+		credential.LastUsedAt = &now
+		if err := s.credentials.Update(context.Background(), credential); err != nil {
+			return iamprincipal.Principal{}, err
+		}
+		return iamprincipal.Principal{
+			AccountKey: credential.AppKey,
+			Name:       credential.Name,
+			TenantID:   credential.TenantID,
+			Kind:       iamprincipal.KindBusiness,
+			Scopes:     []string{ScopeChannelAccess},
+		}, nil
+	}
+	if item != nil {
 		if item.Status != "active" {
-			return Principal{}, forbidden("account token is disabled or revoked")
+			return iamprincipal.Principal{}, forbidden("account token is disabled or revoked")
 		}
 		if item.ExpiresAt != nil && item.ExpiresAt.Before(now) {
-			return Principal{}, forbidden("account token is expired")
+			return iamprincipal.Principal{}, forbidden("account token is expired")
 		}
 		kind := item.Kind
 		if kind == "" {
-			kind = PrincipalKindBusiness
+			kind = iamprincipal.KindBusiness
 		}
 		scopes, err := decodeScopes(item.ScopesJSON)
 		if err != nil {
-			return Principal{}, err
+			return iamprincipal.Principal{}, err
 		}
 		item.LastUsedAt = &now
 		if err := s.accessor.Update(context.Background(), item); err != nil {
-			return Principal{}, err
+			return iamprincipal.Principal{}, err
 		}
-		return Principal{AccountKey: item.AccountKey, TenantID: item.TenantID, Kind: kind, Scopes: scopes}, nil
+		if kind == iamprincipal.KindHuman {
+			return s.authenticateStaff(context.Background(), item)
+		}
+		return iamprincipal.Principal{
+			AccountKey: item.AccountKey,
+			Name:       item.Name,
+			TenantID:   item.TenantID,
+			Kind:       kind,
+			Scopes:     scopes,
+			TokenKey:   item.TokenKey,
+		}, nil
 	}
 	if s.relayToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.relayToken)) == 1 {
-		return Principal{AccountKey: "relay-account", TenantID: s.bootstrapTenantID, Kind: PrincipalKindRelay, Scopes: []string{ScopeAll}}, nil
+		return iamprincipal.Principal{AccountKey: "relay-account", Name: "转发渠道", TenantID: s.bootstrapTenantID, Kind: iamprincipal.KindRelay, Scopes: []string{ScopeAll}}, nil
 	}
 	if s.bootstrapToken == "" || subtle.ConstantTimeCompare([]byte(token), []byte(s.bootstrapToken)) != 1 {
-		return Principal{}, unauthorized("invalid account token")
+		return iamprincipal.Principal{}, unauthorized("invalid account token")
 	}
-	return Principal{AccountKey: "dev-account", TenantID: s.bootstrapTenantID, Kind: PrincipalKindBusiness, Scopes: []string{ScopeAll}}, nil
+	return iamprincipal.Principal{AccountKey: "dev-account", Name: "开发账号", TenantID: s.bootstrapTenantID, Kind: iamprincipal.KindBusiness, Scopes: []string{ScopeAll}}, nil
 }
 
-func (s *AccountService) Issue(ctx context.Context, principal Principal, req IssueAccountTokenRequest) (IssueAccountTokenResult, error) {
+func (s *AccountService) authenticateStaff(ctx context.Context, item *model.AccountToken) (iamprincipal.Principal, error) {
+	user, err := s.users.First(ctx, dataaccess.Eq("user_key", item.AccountKey), dataaccess.Eq("tenant_id", item.TenantID))
+	if errors.Is(err, dataaccess.ErrDataNotFound) {
+		return iamprincipal.Principal{}, unauthorized("staff account is missing")
+	}
+	if err != nil {
+		return iamprincipal.Principal{}, err
+	}
+	if user.Status != "active" {
+		return iamprincipal.Principal{}, forbidden("staff account is disabled")
+	}
+	scopes, err := s.roleScopes(ctx, user.TenantID, user.Role)
+	if err != nil {
+		return iamprincipal.Principal{}, err
+	}
+	return iamprincipal.Principal{
+		AccountKey: user.UserKey,
+		Name:       user.DisplayName,
+		TenantID:   user.TenantID,
+		Kind:       iamprincipal.KindHuman,
+		Scopes:     scopes,
+		TokenKey:   item.TokenKey,
+	}, nil
+}
+
+func (s *AccountService) roleScopes(ctx context.Context, tenantID, role string) ([]string, error) {
+	if role == "owner" {
+		return roleScopes(role), nil
+	}
+	item, err := s.roles.First(ctx, dataaccess.Eq("tenant_id", tenantID), dataaccess.Eq("role_key", role))
+	if errors.Is(err, dataaccess.ErrDataNotFound) {
+		return roleScopes(role), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if item.Status != "active" {
+		return nil, nil
+	}
+	return decodeScopes(item.ScopesJSON)
+}
+
+func (s *AccountService) Issue(ctx context.Context, principal iamprincipal.Principal, req iamdto.IssueAccountTokenRequest) (iamdto.IssueAccountTokenResult, error) {
 	if !principal.HasScope(ScopeIAMTokenManage) {
-		return IssueAccountTokenResult{}, forbidden("principal cannot manage account tokens")
+		return iamdto.IssueAccountTokenResult{}, forbidden("principal cannot manage account tokens")
 	}
 	if req.AccountKey == "" {
-		return IssueAccountTokenResult{}, badRequest("accountKey is required")
+		return iamdto.IssueAccountTokenResult{}, badRequest("accountKey is required")
 	}
 	tenantID := principal.TenantID
 	if req.TenantID != "" && req.TenantID != tenantID && !principal.HasScope(ScopeAll) {
-		return IssueAccountTokenResult{}, forbidden("principal cannot issue tokens for another tenant")
+		return iamdto.IssueAccountTokenResult{}, forbidden("principal cannot issue tokens for another tenant")
 	}
 	if req.TenantID != "" && principal.HasScope(ScopeAll) {
 		tenantID = req.TenantID
 	}
 	kind := req.Kind
 	if kind == "" {
-		kind = PrincipalKindBusiness
+		kind = iamprincipal.KindBusiness
 	}
-	if kind != PrincipalKindBusiness && kind != PrincipalKindRelay {
-		return IssueAccountTokenResult{}, badRequest("unsupported account token kind")
+	if kind != iamprincipal.KindBusiness && kind != iamprincipal.KindRelay {
+		return iamdto.IssueAccountTokenResult{}, badRequest("unsupported account token kind")
 	}
-	if kind == PrincipalKindRelay && principal.Kind != PrincipalKindRelay && !principal.HasScope(ScopeAll) {
-		return IssueAccountTokenResult{}, forbidden("principal cannot issue relay tokens")
+	if kind == iamprincipal.KindRelay && principal.Kind != iamprincipal.KindRelay && !principal.HasScope(ScopeAll) {
+		return iamdto.IssueAccountTokenResult{}, forbidden("principal cannot issue relay tokens")
 	}
 	scopes := cloneStrings(req.Scopes)
 	if len(scopes) == 0 {
 		scopes = []string{ScopeChannelAccess}
-		if kind == PrincipalKindRelay {
+		if kind == iamprincipal.KindRelay {
 			scopes = []string{ScopeRelayAccess}
 		}
 	}
 	if !hasScopes(principal.Scopes, scopes) {
-		return IssueAccountTokenResult{}, forbidden("principal cannot issue requested scopes")
+		return iamdto.IssueAccountTokenResult{}, forbidden("principal cannot issue requested scopes")
 	}
 	secret, err := generateToken("csim")
 	if err != nil {
-		return IssueAccountTokenResult{}, err
+		return iamdto.IssueAccountTokenResult{}, err
 	}
 	tokenKey, err := generateTokenKey()
 	if err != nil {
-		return IssueAccountTokenResult{}, err
+		return iamdto.IssueAccountTokenResult{}, err
 	}
 	item := &model.AccountToken{
 		TokenKey:   tokenKey,
@@ -191,12 +237,13 @@ func (s *AccountService) Issue(ctx context.Context, principal Principal, req Iss
 		item.Name = req.AccountKey
 	}
 	if err := s.accessor.Create(ctx, item); err != nil {
-		return IssueAccountTokenResult{}, err
+		return iamdto.IssueAccountTokenResult{}, err
 	}
-	return IssueAccountTokenResult{Token: tokenInfo(item), Secret: secret}, nil
+	s.recordAudit(ctx, principal, "iam.token", "create", item.TokenKey, "success")
+	return iamdto.IssueAccountTokenResult{Token: tokenInfo(item), Secret: secret}, nil
 }
 
-func (s *AccountService) List(ctx context.Context, principal Principal) ([]AccountTokenInfo, error) {
+func (s *AccountService) List(ctx context.Context, principal iamprincipal.Principal) ([]iamdto.AccountTokenInfo, error) {
 	if !principal.HasScope(ScopeIAMTokenManage) {
 		return nil, forbidden("principal cannot manage account tokens")
 	}
@@ -204,48 +251,53 @@ func (s *AccountService) List(ctx context.Context, principal Principal) ([]Accou
 	if err != nil {
 		return nil, err
 	}
-	result := make([]AccountTokenInfo, 0, len(items))
+	result := make([]iamdto.AccountTokenInfo, 0, len(items))
 	for _, item := range items {
+		if item.Kind == iamprincipal.KindHuman {
+			continue
+		}
 		result = append(result, tokenInfo(item))
 	}
 	return result, nil
 }
 
-func (s *AccountService) Get(ctx context.Context, principal Principal, tokenKey string) (AccountTokenInfo, error) {
+func (s *AccountService) Get(ctx context.Context, principal iamprincipal.Principal, tokenKey string) (iamdto.AccountTokenInfo, error) {
 	item, err := s.accessibleToken(ctx, principal, tokenKey)
 	if err != nil {
-		return AccountTokenInfo{}, err
+		return iamdto.AccountTokenInfo{}, err
 	}
 	return tokenInfo(item), nil
 }
 
-func (s *AccountService) SetStatus(ctx context.Context, principal Principal, tokenKey, status string) (AccountTokenInfo, error) {
+func (s *AccountService) SetStatus(ctx context.Context, principal iamprincipal.Principal, tokenKey, status string) (iamdto.AccountTokenInfo, error) {
 	if status != "active" && status != "disabled" {
-		return AccountTokenInfo{}, badRequest("unsupported account token status")
+		return iamdto.AccountTokenInfo{}, badRequest("unsupported account token status")
 	}
 	item, err := s.accessibleToken(ctx, principal, tokenKey)
 	if err != nil {
-		return AccountTokenInfo{}, err
+		return iamdto.AccountTokenInfo{}, err
 	}
 	item.Status = status
 	if err := s.accessor.Update(ctx, item); err != nil {
-		return AccountTokenInfo{}, err
+		return iamdto.AccountTokenInfo{}, err
 	}
+	s.recordAudit(ctx, principal, "iam.token", "status_change", item.TokenKey, "success")
 	return tokenInfo(item), nil
 }
 
-func (s *AccountService) Rotate(ctx context.Context, principal Principal, tokenKey string) (IssueAccountTokenResult, error) {
+func (s *AccountService) Rotate(ctx context.Context, principal iamprincipal.Principal, tokenKey string) (iamdto.IssueAccountTokenResult, error) {
 	item, err := s.accessibleToken(ctx, principal, tokenKey)
 	if err != nil {
-		return IssueAccountTokenResult{}, err
+		return iamdto.IssueAccountTokenResult{}, err
 	}
 	revokedAt := time.Now()
 	item.RevokedAt = &revokedAt
 	item.Status = "revoked"
 	if err := s.accessor.Update(ctx, item); err != nil {
-		return IssueAccountTokenResult{}, err
+		return iamdto.IssueAccountTokenResult{}, err
 	}
-	return s.Issue(ctx, principal, IssueAccountTokenRequest{
+	s.recordAudit(ctx, principal, "iam.token", "rotate", item.TokenKey, "success")
+	return s.Issue(ctx, principal, iamdto.IssueAccountTokenRequest{
 		AccountKey: item.AccountKey,
 		Name:       item.Name,
 		Kind:       item.Kind,
@@ -254,7 +306,7 @@ func (s *AccountService) Rotate(ctx context.Context, principal Principal, tokenK
 	})
 }
 
-func (s *AccountService) accessibleToken(ctx context.Context, principal Principal, tokenKey string) (*model.AccountToken, error) {
+func (s *AccountService) accessibleToken(ctx context.Context, principal iamprincipal.Principal, tokenKey string) (*model.AccountToken, error) {
 	if !principal.HasScope(ScopeIAMTokenManage) {
 		return nil, forbidden("principal cannot manage account tokens")
 	}
@@ -268,9 +320,9 @@ func (s *AccountService) accessibleToken(ctx context.Context, principal Principa
 	return item, nil
 }
 
-func tokenInfo(item *model.AccountToken) AccountTokenInfo {
+func tokenInfo(item *model.AccountToken) iamdto.AccountTokenInfo {
 	scopes, _ := decodeScopes(item.ScopesJSON)
-	return AccountTokenInfo{
+	return iamdto.AccountTokenInfo{
 		TokenKey:   item.TokenKey,
 		AccountKey: item.AccountKey,
 		Name:       item.Name,

@@ -1,6 +1,7 @@
 package api
 
 import (
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	"net/http"
 
 	"cs-im-server/internal/module/gateway/internal/service"
@@ -17,7 +18,7 @@ func NewConversationAPI(conversationService *service.ConversationService) *Conve
 }
 
 func (a *ConversationAPI) Create(ctx httpapi.Context) {
-	var req service.CreateConversationRequest
+	var req gatewaydto.CreateConversationRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
@@ -45,7 +46,7 @@ func (a *ConversationAPI) Get(ctx httpapi.Context) {
 }
 
 func (a *ConversationAPI) Assign(ctx httpapi.Context) {
-	var req service.AssignConversationRequest
+	var req gatewaydto.AssignConversationRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
@@ -59,7 +60,7 @@ func (a *ConversationAPI) Assign(ctx httpapi.Context) {
 }
 
 func (a *ConversationAPI) Close(ctx httpapi.Context) {
-	var req service.CloseConversationRequest
+	var req gatewaydto.CloseConversationRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
@@ -73,7 +74,7 @@ func (a *ConversationAPI) Close(ctx httpapi.Context) {
 }
 
 func (a *ConversationAPI) Forward(ctx httpapi.Context) {
-	var req service.ForwardConversationRequest
+	var req gatewaydto.ForwardConversationRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return

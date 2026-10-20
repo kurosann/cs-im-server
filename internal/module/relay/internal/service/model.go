@@ -8,6 +8,8 @@ type Channel = configmodel.Channel
 type Webhook = configmodel.Webhook
 type AIConfig = configmodel.AIConfig
 type AIExecution = configmodel.AIExecution
+type AIEmployee = configmodel.AIEmployee
+type AIEmployeeBinding = configmodel.AIEmployeeBinding
 type Delivery = configmodel.Delivery
 
 type RealtimePublisher interface {
