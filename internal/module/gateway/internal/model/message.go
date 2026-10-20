@@ -28,7 +28,7 @@ type Message struct {
 	Type             string        `gorm:"column:type;size:32;not null;default:text" json:"type"`
 	Text             string        `gorm:"column:text;type:text" json:"text,omitempty"`
 	Media            *MessageMedia `gorm:"-" json:"content,omitempty"`
-	MediaJSON        string        `gorm:"column:media;type:json" json:"-"`
+	MediaJSON        *string       `gorm:"column:media;type:json" json:"-"`
 	Status           string        `gorm:"column:status;size:32;not null;default:received" json:"status"`
 }
 
@@ -42,24 +42,25 @@ func (m *Message) Update()            { m.BaseModel.Update() }
 
 func (m *Message) BeforeSave(*gorm.DB) error {
 	if m.Media == nil {
-		m.MediaJSON = ""
+		m.MediaJSON = nil
 		return nil
 	}
 	data, err := json.Marshal(m.Media)
 	if err != nil {
 		return err
 	}
-	m.MediaJSON = string(data)
+	mediaJSON := string(data)
+	m.MediaJSON = &mediaJSON
 	return nil
 }
 
 func (m *Message) AfterFind(*gorm.DB) error {
-	if m.MediaJSON == "" {
+	if m.MediaJSON == nil || *m.MediaJSON == "" || *m.MediaJSON == "null" {
 		m.Media = nil
 		return nil
 	}
 	m.Media = &MessageMedia{}
-	return json.Unmarshal([]byte(m.MediaJSON), m.Media)
+	return json.Unmarshal([]byte(*m.MediaJSON), m.Media)
 }
 
 func (m Message) MarshalJSON() ([]byte, error) {

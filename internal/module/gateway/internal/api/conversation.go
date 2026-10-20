@@ -3,8 +3,10 @@ package api
 import (
 	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	"net/http"
+	"strconv"
 
 	"cs-im-server/internal/module/gateway/internal/service"
+	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	"cs-im-server/pkg/httpapi"
 	commonmodule "vane-common/module"
 )
@@ -32,8 +34,25 @@ func (a *ConversationAPI) Create(ctx httpapi.Context) {
 }
 
 func (a *ConversationAPI) List(ctx httpapi.Context) {
-	conversations := a.Service.List(ctx.Context(), ctx.Query("appId"), ctx.Query("customerId"), ctx.Query("status"))
-	httpapi.WriteJSON(ctx, http.StatusOK, "OK", conversations)
+	principal, ok := iampkg.PrincipalFromContext(ctx.Context())
+	if !ok {
+		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
+		return
+	}
+	page, _ := strconv.Atoi(ctx.Query("page"))
+	pageSize, _ := strconv.Atoi(ctx.Query("pageSize"))
+	pageData, err := a.Service.ListForAdmin(ctx.Context(), principal, service.ConversationFilter{
+		Keyword:  ctx.Query("keyword"),
+		AppID:    ctx.Query("appId"),
+		Status:   ctx.Query("status"),
+		Page:     page,
+		PageSize: pageSize,
+	})
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", pageData)
 }
 
 func (a *ConversationAPI) Get(ctx httpapi.Context) {
@@ -92,6 +111,15 @@ func (a *ConversationAPI) Deliveries(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", deliveries)
 }
 
+func (a *ConversationAPI) MarkRead(ctx httpapi.Context) {
+	markedCount, err := a.Service.MarkRead(ctx.Context(), ctx.Param("id"))
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", markedCount)
+}
+
 func (a *ConversationAPI) AdminRoutes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/conversations")
 	routes.Post("", a.Create)
@@ -100,6 +128,7 @@ func (a *ConversationAPI) AdminRoutes() commonmodule.HttpRouteGroup {
 	routes.Post("/:id/assign", a.Assign)
 	routes.Post("/:id/close", a.Close)
 	routes.Post("/:id/forward", a.Forward)
+	routes.Post("/:id/read", a.MarkRead)
 	routes.Get("/:id/deliveries", a.Deliveries)
 	return routes
 }

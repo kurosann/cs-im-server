@@ -108,6 +108,18 @@ func (s *AccountService) RotateChannelCredential(ctx context.Context, principal 
 	return iamdto.IssueChannelCredentialResult{Credential: channelCredentialInfo(item), Secret: secret}, nil
 }
 
+func (s *AccountService) DeleteChannelCredential(ctx context.Context, principal iamprincipal.Principal, appID string) error {
+	item, err := s.accessibleCredential(ctx, principal, appID)
+	if err != nil {
+		return err
+	}
+	if err := s.credentials.Delete(ctx, item); err != nil {
+		return err
+	}
+	s.recordAudit(ctx, principal, "iam.channel", "delete", item.AppKey, "success")
+	return nil
+}
+
 func (s *AccountService) accessibleCredential(ctx context.Context, principal iamprincipal.Principal, appID string) (*model.ChannelCredential, error) {
 	if appID == "" {
 		return nil, badRequest("appId is required")

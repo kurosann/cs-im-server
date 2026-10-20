@@ -27,6 +27,7 @@ func (a *ChannelCredentialAPI) Routes() commonmodule.HttpRouteGroup {
 	routes.Post("/:appId/disable", a.Disable)
 	routes.Post("/:appId/revoke", a.Revoke)
 	routes.Post("/:appId/rotate", a.Rotate)
+	routes.Delete("/:appId", a.Delete)
 	return routes
 }
 
@@ -87,6 +88,19 @@ func (a *ChannelCredentialAPI) Rotate(ctx httpapi.Context) {
 		return
 	}
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", result)
+}
+
+func (a *ChannelCredentialAPI) Delete(ctx httpapi.Context) {
+	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	if !ok {
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		return
+	}
+	if err := a.Accounts.DeleteChannelCredential(ctx.Context(), principal, ctx.Param("appId")); err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", "deleted")
 }
 
 func (a *ChannelCredentialAPI) setStatus(ctx httpapi.Context, status string) {

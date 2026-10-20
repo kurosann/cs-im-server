@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	"cs-im-server/internal/module/gateway/internal/model"
@@ -29,5 +30,13 @@ type ConversationRetargeter interface {
 
 type MessageStore interface {
 	Get(ctx context.Context, id string) (gatewaydto.MessageRef, error)
-	Latest(ctx context.Context, conversationID string) (gatewaydto.MessageRef, error)
+	Latest(ctx context.Context, conversationID string) (Message, error)
+	ConversationStats(ctx context.Context, conversationID string) (ConversationMessageStats, error)
+	LastReceivedActivity(ctx context.Context, conversationID string) (time.Time, error)
+	MarkConversationRead(ctx context.Context, conversationID string) (int, error)
+}
+
+type ConversationMessageStats struct {
+	UnreadCount int
+	ReplyStatus string
 }

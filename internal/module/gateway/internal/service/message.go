@@ -186,11 +186,15 @@ func (s *MessageService) ChannelEventAllowed(appID string, event RealtimeEvent) 
 }
 
 func (s *MessageService) RelayEventAllowed(event RealtimeEvent) bool {
-	if event.Type != "message.created" {
+	switch event.Type {
+	case "conversation.created":
+		return true
+	case "message.created":
+		message, ok := event.Data.(Message)
+		return ok && message.SenderRole == "customer"
+	default:
 		return false
 	}
-	message, ok := event.Data.(Message)
-	return ok && message.SenderRole == "customer"
 }
 
 func (s *MessageService) RelayHistory(_ context.Context, conversationID string, filter gatewaydto.MessageHistoryFilter) (gatewaydto.MessageHistoryPage, error) {
@@ -273,6 +277,65 @@ func (s *MessageService) Latest(_ context.Context, conversationID string) (Messa
 		return Message{}, badRequest("conversation has no message to forward")
 	}
 	return items[len(items)-1], nil
+}
+
+func (s *MessageService) ConversationStats(_ context.Context, conversationID string) (ConversationMessageStats, error) {
+	messages := s.List(context.Background(), conversationID, 0, 0, 0)
+	stats := ConversationMessageStats{ReplyStatus: "unreplied"}
+	for _, message := range messages {
+		if message.SenderRole == "customer" && message.Status != "read" {
+			stats.UnreadCount++
+		}
+	}
+	if len(messages) > 0 {
+		latest := messages[len(messages)-1]
+		if latest.SenderRole == "agent" || latest.SenderRole == "ai" {
+			stats.ReplyStatus = "replied"
+		}
+	}
+	return stats, nil
+}
+
+func (s *MessageService) LastReceivedActivity(_ context.Context, conversationID string) (time.Time, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var latest time.Time
+	for _, message := range s.messages {
+		if message.ConversationKey != conversationID {
+			continue
+		}
+		if message.SenderRole != "customer" {
+			continue
+		}
+		if createdAt := message.CreatedAt(); createdAt.After(latest) {
+			latest = createdAt
+		}
+	}
+	if latest.IsZero() {
+		return time.Time{}, badRequest("conversation has no activity")
+	}
+	return latest, nil
+}
+
+func (s *MessageService) MarkConversationRead(_ context.Context, conversationID string) (int, error) {
+	now := time.Now().UTC()
+	markedCount := 0
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, message := range s.messages {
+		if message.ConversationKey != conversationID || message.SenderRole != "customer" || message.Status == "read" {
+			continue
+		}
+		message.Status = "read"
+		message.UpdateAt = now
+		if err := s.accessor.Save(context.Background(), message); err != nil {
+			return markedCount, err
+		}
+		markedCount++
+		s.realtime.Publish("message.status_changed", message.MessageKey, *message)
+	}
+	return markedCount, nil
 }
 
 func (s *MessageService) List(_ context.Context, conversationID string, afterSeq, beforeSeq int64, limit int) []Message {
