@@ -108,6 +108,33 @@ func (s *AccountService) RotateChannelCredential(ctx context.Context, principal 
 	return iamdto.IssueChannelCredentialResult{Credential: channelCredentialInfo(item), Secret: secret}, nil
 }
 
+func (s *AccountService) DeleteChannelCredential(ctx context.Context, principal iamprincipal.Principal, appID string) error {
+	item, err := s.accessibleCredential(ctx, principal, appID)
+	if err != nil {
+		return err
+	}
+	if err := s.credentials.Delete(ctx, item); err != nil {
+		return err
+	}
+	s.recordAudit(ctx, principal, "iam.channel", "delete", item.AppKey, "success")
+	return nil
+}
+
+func (s *AccountService) ExistingChannelAppIDs(ctx context.Context, principal iamprincipal.Principal) (map[string]struct{}, error) {
+	if !principal.HasKind(iamprincipal.KindHuman) {
+		return nil, forbidden("only staff can read channel credentials")
+	}
+	items, err := s.credentials.List(ctx, dataaccess.Eq("tenant_id", principal.TenantID))
+	if err != nil {
+		return nil, err
+	}
+	appIDs := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		appIDs[item.AppKey] = struct{}{}
+	}
+	return appIDs, nil
+}
+
 func (s *AccountService) accessibleCredential(ctx context.Context, principal iamprincipal.Principal, appID string) (*model.ChannelCredential, error) {
 	if appID == "" {
 		return nil, badRequest("appId is required")

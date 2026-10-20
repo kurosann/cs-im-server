@@ -28,6 +28,7 @@ func (a *RealtimeAPI) Stream(ctx httpapi.Context) {
 		writeServiceError(ctx, err)
 		return
 	}
+	a.Apps.MarkConnected(ctx.Param("id"))
 	events, closeFn, err := a.Realtime.Subscribe(ctx.Context())
 	if err != nil {
 		writeServiceError(ctx, err)

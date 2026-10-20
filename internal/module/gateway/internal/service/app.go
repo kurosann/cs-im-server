@@ -151,6 +151,27 @@ func (s *AppService) Heartbeat(_ context.Context, principal Principal, req gatew
 	return result, nil
 }
 
+func (s *AppService) MarkConnected(appID string) {
+	s.mu.Lock()
+	app, ok := s.apps[appID]
+	if !ok || app.Status != "active" {
+		s.mu.Unlock()
+		return
+	}
+	now := time.Now().UTC()
+	leaseExpiresAt := now.Add(time.Duration(app.LeaseTTLSeconds) * time.Second)
+	app.LastHeartbeatAt = &now
+	app.LeaseExpiresAt = &leaseExpiresAt
+	app.UpdateAt = now
+	if err := s.accessor.Save(context.Background(), app); err != nil {
+		s.mu.Unlock()
+		return
+	}
+	result := *app
+	s.mu.Unlock()
+	s.realtime.Publish("app.heartbeat", app.AppKey, result)
+}
+
 func (s *AppService) SetStatus(_ context.Context, principal Principal, id string, enabled bool) (App, error) {
 	now := time.Now().UTC()
 	status := "disabled"

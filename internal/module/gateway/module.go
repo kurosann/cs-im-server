@@ -60,6 +60,8 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	customerAPI := api.NewCustomerAPI(m.customers)
 	conversationAPI := api.NewConversationAPI(m.conversations)
 	messageAPI := api.NewMessageAPI(m.messages)
+	realtimeAPI := api.NewRealtimeAPI(m.realtime, m.conversations)
+	monitorAPI := api.NewMonitorAPI(m.apps, m.conversations)
 
 	adminGroup := commonmodule.NewHttpRouteGroup("/admin/v1").Compose(
 		appAPI.AdminRoutes(),
@@ -67,6 +69,8 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 		conversationAPI.AdminRoutes(),
 		messageAPI.AdminRoutes(),
 		messageAPI.AdminConversationRoutes(),
+		realtimeAPI.AdminRoutes(),
+		monitorAPI.AdminRoutes(),
 	)
 
 	return commonmodule.HttpApiInfo{

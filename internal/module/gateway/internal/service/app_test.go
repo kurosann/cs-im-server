@@ -112,3 +112,20 @@ func TestAppServiceRequiresChannelScope(t *testing.T) {
 		t.Fatal("AuthorizeAccount() allowed relay principal")
 	}
 }
+
+func TestAppServiceMarkConnected(t *testing.T) {
+	service := setupAppService(t)
+	app := registerApp(t, service, "tenant_1", "frontend", "Demo Frontend")
+
+	if app.LastHeartbeatAt != nil || app.LeaseExpiresAt != nil {
+		t.Fatal("registered app should start without a live lease")
+	}
+	service.MarkConnected(app.AppKey)
+	updated, err := service.Get(context.Background(), app.AppKey)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if updated.LastHeartbeatAt == nil || updated.LeaseExpiresAt == nil {
+		t.Fatalf("MarkConnected() did not set lease: %+v", updated)
+	}
+}

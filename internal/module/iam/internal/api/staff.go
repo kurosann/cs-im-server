@@ -40,6 +40,7 @@ func (a *StaffAPI) Routes() commonmodule.HttpRouteGroup {
 	routes.Put("/:userKey", a.Update)
 	routes.Post("/:userKey/role", a.SetRole)
 	routes.Post("/:userKey/status", a.SetStatus)
+	routes.Post("/:userKey/password/reset", a.ResetPassword)
 	routes.Post("/:userKey/logout", a.ForceLogout)
 	return routes
 }
@@ -132,6 +133,20 @@ func (a *StaffAPI) SetStatus(ctx httpapi.Context) {
 		return
 	}
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", item)
+}
+
+func (a *StaffAPI) ResetPassword(ctx httpapi.Context) {
+	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	if !ok {
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		return
+	}
+	result, err := a.Staff.ResetPassword(ctx.Context(), principal, ctx.Param("userKey"))
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", result)
 }
 
 func (a *StaffAPI) ForceLogout(ctx httpapi.Context) {

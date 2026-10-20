@@ -57,6 +57,20 @@ func TestChannelCredentialLifecycle(t *testing.T) {
 	if _, err := service.Authenticate(context.Background(), rotated.Secret); err != nil {
 		t.Fatalf("Authenticate() rotated credential error = %v", err)
 	}
+
+	if err := service.DeleteChannelCredential(context.Background(), staffIAMPrincipal(), "app_test"); err != nil {
+		t.Fatalf("DeleteChannelCredential() error = %v", err)
+	}
+	if _, err := service.Authenticate(context.Background(), rotated.Secret); err == nil {
+		t.Fatal("Authenticate() accepted deleted credential")
+	}
+	credentials, err := service.ListChannelCredentials(context.Background(), staffIAMPrincipal())
+	if err != nil || len(credentials) != 0 {
+		t.Fatalf("ListChannelCredentials() = %+v, error = %v", credentials, err)
+	}
+	if appIDs, err := service.ExistingChannelAppIDs(context.Background(), staffIAMPrincipal()); err != nil || len(appIDs) != 0 {
+		t.Fatalf("ExistingChannelAppIDs() = %+v, error = %v", appIDs, err)
+	}
 }
 
 func TestChannelCredentialExpiry(t *testing.T) {

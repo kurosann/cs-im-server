@@ -30,5 +30,9 @@ access:
   relay_token: "dev-relay-token"
   tenant_id: "dev-tenant"
 
+http:
+  host: "127.0.0.1"
+  port: 8080
+
 database:
-  dsn: ""
+  dsn: "tlgs:tlgadmin123@tcp(119.91.220.213:7036)/cs_im?charset=utf8mb4&parseTime=true&loc=Local"
