@@ -178,6 +178,41 @@ func (s *StaffService) Logout(ctx context.Context, principal iamprincipal.Princi
 	return nil
 }
 
+func (s *StaffService) ChangeOwnPassword(ctx context.Context, principal iamprincipal.Principal, req iamdto.ChangeOwnPasswordRequest) error {
+	if principal.Kind != iamprincipal.KindHuman {
+		return forbidden("only staff can change password")
+	}
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		return badRequest("currentPassword and newPassword are required")
+	}
+	if utf8.RuneCountInString(req.NewPassword) < 8 {
+		return badRequest("new password must be at least 8 characters")
+	}
+	if req.NewPassword == req.CurrentPassword {
+		return badRequest("new password must be different")
+	}
+	user, err := s.users.First(ctx, dataaccess.Eq("user_key", principal.AccountKey), dataaccess.Eq("tenant_id", principal.TenantID))
+	if err != nil {
+		return notFound("staff not found")
+	}
+	if user.Status != "active" || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)) != nil {
+		return unauthorized("current password is incorrect")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	user.PasswordHash = string(hash)
+	if err := s.users.Update(ctx, user); err != nil {
+		return err
+	}
+	if err := s.revokeSessions(ctx, user); err != nil {
+		return err
+	}
+	s.recordAudit(ctx, principal, "iam.auth", "change_password", user.UserKey, "success")
+	return nil
+}
+
 func (s *StaffService) List(ctx context.Context, principal iamprincipal.Principal) ([]iamdto.User, error) {
 	if err := s.requireUserManager(principal); err != nil {
 		return nil, err
@@ -337,6 +372,30 @@ func (s *StaffService) SetStatus(ctx context.Context, principal iamprincipal.Pri
 		}
 	}
 	return staffInfo(item, nil), nil
+}
+
+func (s *StaffService) ResetPassword(ctx context.Context, principal iamprincipal.Principal, userKey string) (iamdto.CreateStaffResult, error) {
+	item, err := s.accessStaff(ctx, principal, userKey)
+	if err != nil {
+		return iamdto.CreateStaffResult{}, err
+	}
+	password, err := generateToken("pwd")
+	if err != nil {
+		return iamdto.CreateStaffResult{}, err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return iamdto.CreateStaffResult{}, err
+	}
+	item.PasswordHash = string(hash)
+	if err := s.users.Update(ctx, item); err != nil {
+		return iamdto.CreateStaffResult{}, err
+	}
+	if err := s.revokeSessions(ctx, item); err != nil {
+		return iamdto.CreateStaffResult{}, err
+	}
+	s.recordAudit(ctx, principal, "iam.staff", "reset_password", item.UserKey, "success")
+	return iamdto.CreateStaffResult{User: staffInfo(item, nil), InitialPassword: password}, nil
 }
 
 func (s *StaffService) ForceLogout(ctx context.Context, principal iamprincipal.Principal, userKey string) error {

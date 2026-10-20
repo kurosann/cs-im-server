@@ -56,6 +56,11 @@ type CreateStaffResult struct {
 	InitialPassword string `json:"initialPassword"`
 }
 
+type ChangeOwnPasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
+}
+
 type UpdateStaffRequest struct {
 	DisplayName string `json:"displayName"`
 	Email       string `json:"email"`

@@ -55,6 +55,14 @@ type ConversationPage struct {
 	Total int64                 `json:"total"`
 }
 
+type DeliveryStats struct {
+	Total       int        `json:"total"`
+	Queued      int        `json:"queued"`
+	Delivered   int        `json:"delivered"`
+	Failed      int        `json:"failed"`
+	LastEventAt *time.Time `json:"lastEventAt,omitempty"`
+}
+
 func NewConversationService(apps *AppService, customers *CustomerService, messages MessageStore, realtime *RealtimeService) *ConversationService {
 	return &ConversationService{
 		conversations: make(map[string]*Conversation),
@@ -407,6 +415,42 @@ func (s *ConversationService) Deliveries(_ context.Context, conversationID strin
 	}
 	sort.Slice(deliveries, func(i, j int) bool { return deliveries[i].CreateAt.Before(deliveries[j].CreateAt) })
 	return deliveries
+}
+
+func (s *ConversationService) DeliveryStatsByChannel() map[string]DeliveryStats {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	stats := make(map[string]DeliveryStats)
+	for _, delivery := range s.deliveries {
+		item := stats[delivery.ChannelKey]
+		item.Total++
+		switch delivery.Status {
+		case "queued":
+			item.Queued++
+		case "delivered":
+			item.Delivered++
+		case "failed":
+			item.Failed++
+		}
+		lastEventAt := delivery.UpdateAt
+		if item.LastEventAt == nil || lastEventAt.After(*item.LastEventAt) {
+			item.LastEventAt = &lastEventAt
+		}
+		stats[delivery.ChannelKey] = item
+	}
+	return stats
+}
+
+func (s *ConversationService) ConversationCountByApp() map[string]int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	counts := make(map[string]int)
+	for _, conversation := range s.conversations {
+		counts[conversation.AppKey]++
+	}
+	return counts
 }
 
 func (s *ConversationService) RetargetCustomer(sourceID, targetID string) error {

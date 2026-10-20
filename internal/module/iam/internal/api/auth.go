@@ -32,6 +32,7 @@ func (a *AuthAPI) Routes() []commonmodule.HttpHandlerRegInfo {
 	return []commonmodule.HttpHandlerRegInfo{
 		auth.Post("/login", a.Login),
 		auth.Post("/register", a.Register),
+		auth.Post("/password", a.ChangePassword, commonmodule.WithMiddlewares(iamhttp.AccountTokenMiddleware(), iamhttp.RequirePrincipalKind(pkg.PrincipalKindHuman))),
 		auth.Post("/logout", a.Logout, commonmodule.WithMiddlewares(iamhttp.AccountTokenMiddleware(), iamhttp.RequirePrincipalKind(pkg.PrincipalKindHuman))),
 		auth.Get("/me", a.Me, commonmodule.WithMiddlewares(iamhttp.AccountTokenMiddleware(), iamhttp.RequirePrincipalKind(pkg.PrincipalKindHuman))),
 	}
@@ -79,6 +80,20 @@ func (a *AuthAPI) Logout(ctx httpapi.Context) {
 		return
 	}
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", nil)
+}
+
+func (a *AuthAPI) ChangePassword(ctx httpapi.Context) {
+	principal, _ := pkg.PrincipalFromContext(ctx.Context())
+	var req iamdto.ChangeOwnPasswordRequest
+	if err := ctx.BindJSON(&req); err != nil {
+		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	if err := a.Staff.ChangeOwnPassword(ctx.Context(), principal, req); err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", "password_changed")
 }
 
 func (a *AuthAPI) Me(ctx httpapi.Context) {

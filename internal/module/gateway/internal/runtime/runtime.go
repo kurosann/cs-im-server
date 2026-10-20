@@ -12,6 +12,7 @@ import (
 
 type AppAuthorizer interface {
 	AuthorizeAccount(appID string, principal iampkg.Principal) error
+	MarkConnected(appID string)
 }
 
 type ConversationIngress interface {

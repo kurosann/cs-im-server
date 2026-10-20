@@ -68,6 +68,9 @@ func TestChannelCredentialLifecycle(t *testing.T) {
 	if err != nil || len(credentials) != 0 {
 		t.Fatalf("ListChannelCredentials() = %+v, error = %v", credentials, err)
 	}
+	if appIDs, err := service.ExistingChannelAppIDs(context.Background(), staffIAMPrincipal()); err != nil || len(appIDs) != 0 {
+		t.Fatalf("ExistingChannelAppIDs() = %+v, error = %v", appIDs, err)
+	}
 }
 
 func TestChannelCredentialExpiry(t *testing.T) {

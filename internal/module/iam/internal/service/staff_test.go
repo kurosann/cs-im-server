@@ -235,6 +235,80 @@ func TestStaffUpdateChangesProfileAndRole(t *testing.T) {
 	}
 }
 
+func TestStaffResetPasswordRevokesSessions(t *testing.T) {
+	service := setupStaffService(t)
+	admin, err := service.Login(context.Background(), iamdto.LoginRequest{
+		Identifier: "admin@cs-im.local",
+		Password:   "admin12345",
+	}, iamdto.SessionContext{})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	principal, err := service.Accounts().Authenticate(context.Background(), admin.Token.Token)
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+	created, err := service.Create(context.Background(), principal, iamdto.CreateStaffRequest{
+		DisplayName: "重置员工",
+		Email:       "reset@example.com",
+		Role:        "agent",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	memberLogin, err := service.Login(context.Background(), iamdto.LoginRequest{
+		Identifier: "reset@example.com",
+		Password:   created.InitialPassword,
+	}, iamdto.SessionContext{})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+
+	reset, err := service.ResetPassword(context.Background(), principal, created.User.UserKey)
+	if err != nil || reset.InitialPassword == "" {
+		t.Fatalf("ResetPassword() = %+v, error = %v", reset, err)
+	}
+	if _, err := service.Accounts().Authenticate(context.Background(), memberLogin.Token.Token); err == nil {
+		t.Fatal("session remained active after password reset")
+	}
+	if _, err := service.Login(context.Background(), iamdto.LoginRequest{
+		Identifier: "reset@example.com",
+		Password:   reset.InitialPassword,
+	}, iamdto.SessionContext{}); err != nil {
+		t.Fatalf("Login() after reset error = %v", err)
+	}
+}
+
+func TestStaffChangeOwnPasswordRevokesSessions(t *testing.T) {
+	service := setupStaffService(t)
+	admin, err := service.Login(context.Background(), iamdto.LoginRequest{
+		Identifier: "admin@cs-im.local",
+		Password:   "admin12345",
+	}, iamdto.SessionContext{})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	principal, err := service.Accounts().Authenticate(context.Background(), admin.Token.Token)
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+	if err := service.ChangeOwnPassword(context.Background(), principal, iamdto.ChangeOwnPasswordRequest{
+		CurrentPassword: "admin12345",
+		NewPassword:     "new-password-123",
+	}); err != nil {
+		t.Fatalf("ChangeOwnPassword() error = %v", err)
+	}
+	if _, err := service.Accounts().Authenticate(context.Background(), admin.Token.Token); err == nil {
+		t.Fatal("session remained active after password change")
+	}
+	if _, err := service.Login(context.Background(), iamdto.LoginRequest{
+		Identifier: "admin@cs-im.local",
+		Password:   "new-password-123",
+	}, iamdto.SessionContext{}); err != nil {
+		t.Fatalf("Login() after password change error = %v", err)
+	}
+}
+
 func TestRegisterCreatesTenantWithOwnerAccount(t *testing.T) {
 	service := setupStaffService(t)
 	login, err := service.Register(context.Background(), iamdto.RegisterRequest{
