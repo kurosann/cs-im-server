@@ -87,22 +87,7 @@ CS_IM_DB_DSN="user:password@tcp(host:port)/cs_im_dev?charset=utf8mb4&parseTime=t
   SERVER_PORT=8080 make run
 ```
 
-开发访问标识：
-
-- 业务渠道 Token：`dev-access-token`
-- 转发渠道 Token：`dev-relay-token`
-- 默认租户：`dev-tenant`
-
-Token 可通过 `CS_IM_ACCOUNT_TOKEN`、`CS_IM_RELAY_TOKEN`、`CS_IM_TENANT_ID` 覆盖。
-
-使用开发引导 Token 可签发最小权限 Token：
-
-```bash
-curl -X POST -H "Authorization: Bearer dev-access-token" \
-  -H "Content-Type: application/json" \
-  -d '{"accountKey":"app-account","name":"web app","kind":"business"}' \
-  http://127.0.0.1:8080/admin/v1/iam/tokens
-```
+通过注册入口创建租户主账号，随后通过 IAM 管理接口创建员工、角色和渠道凭证。
 
 ## 构建与测试
 
@@ -116,8 +101,7 @@ make build
 版本接口：
 
 ```bash
-curl -H "Authorization: Bearer dev-access-token" \
-  http://127.0.0.1:8080/api/v1/version
+curl http://127.0.0.1:8080/api/v1/version
 ```
 
 健康检查、Prometheus 等遥测能力由 `cs-im-common` 内置，本工程不单独定义 `healthz` / `readyz` 路由。
@@ -129,7 +113,6 @@ curl -H "Authorization: Bearer dev-access-token" \
 - `server`：gRPC、standalone 与遥测配置
 - `http`：HTTP 监听地址和端口
 - `log`：日志配置
-- `access`：开发 Token 与租户
 - `database`：MySQL DSN
 
 环境变量会在加载 YAML 后覆盖对应字段。

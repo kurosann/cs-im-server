@@ -28,7 +28,6 @@ const ServiceRoleName = role.ServiceRole(consts.ServiceName)
 type ConfigRoot struct {
 	Server   ServerConfig       `yaml:"server"`
 	Log      logger.LogConfig   `yaml:"log"`
-	Access   AccessConfig       `yaml:"access"`
 	HTTP     HTTPListenerConfig `yaml:"http"`
 	Database DatabaseConfig     `yaml:"database"`
 	AI       AIModelConfig      `yaml:"ai"`
@@ -56,12 +55,6 @@ type PushGatewayConfig struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 	PushGap  int    `yaml:"push_gap"`
-}
-
-type AccessConfig struct {
-	AccountToken string `yaml:"account_token"`
-	RelayToken   string `yaml:"relay_token"`
-	TenantID     string `yaml:"tenant_id"`
 }
 
 type HTTPListenerConfig struct {
@@ -144,11 +137,6 @@ func defaultConfig() *ConfigRoot {
 			MaxAge:        7,
 			ConsoleEncode: true,
 		},
-		Access: AccessConfig{
-			AccountToken: "dev-access-token",
-			RelayToken:   "dev-relay-token",
-			TenantID:     "dev-tenant",
-		},
 		HTTP: HTTPListenerConfig{
 			Host: consts.DefaultServerHost,
 			Port: consts.DefaultServerPort,
@@ -168,15 +156,6 @@ func applyDefaults(cfg *ConfigRoot) {
 	}
 	if cfg.HTTP.Port == 0 {
 		cfg.HTTP.Port = cfg.Server.Port
-	}
-	if cfg.Access.AccountToken == "" {
-		cfg.Access.AccountToken = "dev-access-token"
-	}
-	if cfg.Access.RelayToken == "" {
-		cfg.Access.RelayToken = "dev-relay-token"
-	}
-	if cfg.Access.TenantID == "" {
-		cfg.Access.TenantID = "dev-tenant"
 	}
 	if cfg.AI.Endpoint == "" {
 		cfg.AI.Endpoint = "https://api.minimaxi.com/v1"
@@ -212,15 +191,6 @@ func injectEnv() {
 		} else {
 			appConfig.Server.Port = port
 		}
-	}
-	if value := os.Getenv("CS_IM_ACCOUNT_TOKEN"); value != "" {
-		appConfig.Access.AccountToken = value
-	}
-	if value := os.Getenv("CS_IM_RELAY_TOKEN"); value != "" {
-		appConfig.Access.RelayToken = value
-	}
-	if value := os.Getenv("CS_IM_TENANT_ID"); value != "" {
-		appConfig.Access.TenantID = value
 	}
 	if value := os.Getenv("CS_IM_DB_DSN"); value != "" {
 		appConfig.Database.DSN = value

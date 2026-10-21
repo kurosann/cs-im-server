@@ -22,11 +22,9 @@ type Principal struct {
 
 type ContextKey struct{}
 
-var ErrMissing = errors.New("principal is missing")
+const scopeWildcard = "*"
 
-func WithPrincipal(ctx context.Context, principal Principal) context.Context {
-	return context.WithValue(ctx, ContextKey{}, principal)
-}
+var ErrMissing = errors.New("principal is missing")
 
 func FromContext(ctx context.Context) (Principal, bool) {
 	principal, ok := ctx.Value(ContextKey{}).(Principal)
@@ -38,7 +36,7 @@ func (p Principal) HasScope(scope string) bool {
 		return false
 	}
 	for _, value := range p.Scopes {
-		if value == scope || value == "*" {
+		if value == scope || value == scopeWildcard {
 			return true
 		}
 	}

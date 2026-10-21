@@ -2,9 +2,9 @@ package iam
 
 import (
 	"context"
+
 	iamhttp "cs-im-server/internal/module/iam/pkg/http"
 
-	"cs-im-server/internal/cfg"
 	"cs-im-server/internal/module/iam/internal/api"
 	"cs-im-server/internal/module/iam/internal/model"
 	iamService "cs-im-server/internal/module/iam/internal/service"
@@ -12,25 +12,25 @@ import (
 	commonmodule "vane-common/module"
 )
 
-var _ commonmodule.IModule = (*Module)(nil)
-var _ commonmodule.IModuleDb = (*Module)(nil)
+var (
+	_ commonmodule.IModule   = (*Module)(nil)
+	_ commonmodule.IModuleDb = (*Module)(nil)
+)
 
-type Module struct{}
+type Module struct {
+	accounts *iamService.AccountService
+	staff    *iamService.StaffService
+	roles    *iamService.RoleService
+	audit    *iamService.AuditService
+}
 
 func (m *Module) Init(_ context.Context) error {
-	bootstrapToken := "dev-access-token"
-	relayToken := "dev-relay-token"
-	tenantID := "dev-tenant"
-	adminEmail := "admin@cs-im.local"
-	adminPassword := "admin12345"
-	if config := cfg.GetConfig(); config != nil {
-		bootstrapToken = config.Access.AccountToken
-		relayToken = config.Access.RelayToken
-		tenantID = config.Access.TenantID
-	}
-	accountService := iamService.NewAccountService(bootstrapToken, tenantID, relayToken)
-	iam.SetService(accountService)
-	iam.SetStaffService(iamService.NewStaffService(accountService, adminEmail, adminPassword, tenantID))
+	m.audit = iamService.NewAuditService()
+	m.accounts = iamService.NewAccountServiceWithAudit(m.audit)
+	m.staff = iamService.NewStaffService(m.accounts)
+	m.roles = iamService.NewRoleService(m.audit)
+	iam.SetService(m.accounts)
+	iam.SetStaffService(m.staff)
 	return nil
 }
 
@@ -49,25 +49,26 @@ func (m *Module) Api() []commonmodule.ApiRegInfo   { return nil }
 func (m *Module) Job() []commonmodule.JobRegInfo   { return nil }
 func (m *Module) Task() []commonmodule.TaskRegInfo { return nil }
 func (m *Module) HttpApi() commonmodule.HttpApiInfo {
-	tokenAPI := api.NewTokenAPI(iam.Service())
-	authAPI := api.NewAuthAPI(iam.StaffService())
-	channelCredentialAPI := api.NewChannelCredentialAPI(iam.Service())
-	staffAPI := api.NewStaffAPI(iam.StaffService())
-	roleAPI := api.NewRoleAPI(iamService.NewRoleService(iamService.NewAuditService()))
+	tokenAPI := api.NewTokenAPI(m.accounts)
+	authAPI := api.NewAuthAPI(m.accounts, m.staff)
+	channelCredentialAPI := api.NewChannelCredentialAPI(m.accounts)
+	staffAPI := api.NewStaffAPI(m.staff)
+	roleAPI := api.NewRoleAPI(m.roles)
 	adminGroup := commonmodule.NewHttpRouteGroup("/admin/v1/iam", commonmodule.WithGroupMiddlewares(
-		iamhttp.AccountTokenMiddleware(),
+		iamhttp.AccountTokenMiddleware(m.accounts),
 		iamhttp.RequirePrincipalScope(iam.ScopeIAMTokenManage),
 	)).Compose(tokenAPI.AdminRoutes(), channelCredentialAPI.Routes(), staffAPI.Routes())
 	roleGroup := commonmodule.NewHttpRouteGroup("/admin/v1/iam", commonmodule.WithGroupMiddlewares(
-		iamhttp.AccountTokenMiddleware(),
-		iamhttp.RequirePrincipalScope(iamService.ScopeIAMRoleManage),
+		iamhttp.AccountTokenMiddleware(m.accounts),
+		iamhttp.RequirePrincipalScope(iam.ScopeIAMRoleManage),
 	)).Compose(roleAPI.Routes())
-	auditAPI := api.NewAuditAPI(iamService.NewAuditService())
+	auditAPI := api.NewAuditAPI(m.audit)
 	auditGroup := commonmodule.NewHttpRouteGroup("/admin/v1/iam", commonmodule.WithGroupMiddlewares(
-		iamhttp.AccountTokenMiddleware(),
-		iamhttp.RequirePrincipalScope("audit:read"),
+		iamhttp.AccountTokenMiddleware(m.accounts),
+		iamhttp.RequirePrincipalScope(iam.ScopeAuditRead),
 	)).Compose(auditAPI.Routes())
+
 	return commonmodule.HttpApiInfo{
-		Handlers: append(adminGroup.Handlers(), append(authAPI.Routes(), append(roleGroup.Handlers(), auditGroup.Handlers()...)...)...),
+		Handlers: append(authAPI.Routes(), adminGroup.Merge(roleGroup, auditGroup)...),
 	}
 }

@@ -55,7 +55,7 @@ func (s *AuditService) Record(ctx context.Context, principal iamprincipal.Princi
 }
 
 func (s *AuditService) List(ctx context.Context, principal iamprincipal.Principal, filter iamdto.AuditFilter) (iamdto.AuditPage, error) {
-	if principal.Kind != iamprincipal.KindHuman || !principal.HasScope("audit:read") {
+	if principal.Kind != iamprincipal.KindHuman || !principal.HasScope(ScopeAuditRead) {
 		return iamdto.AuditPage{}, forbidden("principal cannot read audit logs")
 	}
 	conditions := []dataaccess.QueryCondition{

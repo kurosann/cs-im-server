@@ -63,7 +63,7 @@ func setupChannelGateway(t *testing.T) channelGatewayFixture {
 	if err != nil {
 		t.Fatalf("register app: %v", err)
 	}
-	accounts := iampkg.NewAccountService("bootstrap-token", "tenant_1")
+	accounts := iampkg.NewAccountService()
 	credential, err := accounts.IssueChannelCredential(
 		context.Background(),
 		iampkg.Principal{
@@ -113,6 +113,16 @@ func TestChannelGatewayCustomerBoundary(t *testing.T) {
 	}
 	if conversation.Created != false || conversation.ConversationId != fixture.conversationID {
 		t.Fatalf("EnsureConversation() = %+v", conversation)
+	}
+
+	fetched, err := fixture.api.GetConversation(ctx, &gatewayv1.GetConversationRequest{
+		AppId: fixture.appID, ConversationId: fixture.conversationID,
+	})
+	if err != nil {
+		t.Fatalf("GetConversation() error = %v", err)
+	}
+	if fetched.ConversationId != fixture.conversationID || fetched.CustomerId != conversation.CustomerId {
+		t.Fatalf("GetConversation() = %+v", fetched)
 	}
 
 	sentAt := time.Now().UTC().Format(time.RFC3339Nano)

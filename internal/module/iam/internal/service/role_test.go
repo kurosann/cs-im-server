@@ -10,14 +10,28 @@ import (
 
 func TestRolePermissionsAffectAuthentication(t *testing.T) {
 	staffService := setupStaffService(t)
-	login, err := staffService.Login(context.Background(), iamdto.LoginRequest{
-		Identifier: "admin@cs-im.local",
-		Password:   "admin12345",
+	owner := registerOwner(t, staffService)
+	ownerPrincipal, err := staffService.Accounts().Authenticate(context.Background(), owner.Token.Token)
+	if err != nil || !ownerPrincipal.HasScope(iamservice.ScopeIAMRoleManage) {
+		t.Fatalf("Authenticate() = %+v, error = %v", ownerPrincipal, err)
+	}
+
+	adminStaff, err := staffService.Create(context.Background(), ownerPrincipal, iamdto.CreateStaffRequest{
+		DisplayName: "管理员",
+		Email:       "admin@example.com",
+		Role:        "admin",
+	})
+	if err != nil {
+		t.Fatalf("Create() admin error = %v", err)
+	}
+	adminLogin, err := staffService.Login(context.Background(), iamdto.LoginRequest{
+		Identifier: "admin@example.com",
+		Password:   adminStaff.InitialPassword,
 	}, iamdto.SessionContext{})
 	if err != nil {
-		t.Fatalf("Login() error = %v", err)
+		t.Fatalf("Login() admin error = %v", err)
 	}
-	principal, err := staffService.Accounts().Authenticate(context.Background(), login.Token.Token)
+	principal, err := staffService.Accounts().Authenticate(context.Background(), adminLogin.Token.Token)
 	if err != nil || !principal.HasScope(iamservice.ScopeIAMRoleManage) {
 		t.Fatalf("Authenticate() = %+v, error = %v", principal, err)
 	}
@@ -27,23 +41,23 @@ func TestRolePermissionsAffectAuthentication(t *testing.T) {
 		Name:        "管理员",
 		Description: "受限管理员",
 		Status:      "active",
-		Scopes:      []string{"conversation:read"},
+		Scopes:      []string{iamservice.ScopeConversationRead},
 	})
-	if err != nil || len(updated.Scopes) != 1 || updated.Scopes[0] != "conversation:read" {
+	if err != nil || len(updated.Scopes) != 1 || updated.Scopes[0] != iamservice.ScopeConversationRead {
 		t.Fatalf("Update() = %+v, error = %v", updated, err)
 	}
-	refreshed, err := staffService.Accounts().Authenticate(context.Background(), login.Token.Token)
+	refreshed, err := staffService.Accounts().Authenticate(context.Background(), adminLogin.Token.Token)
 	if err != nil {
 		t.Fatalf("Authenticate() error = %v", err)
 	}
-	if refreshed.HasScope(iamservice.ScopeIAMRoleManage) || !refreshed.HasScope("conversation:read") {
+	if refreshed.HasScope(iamservice.ScopeIAMRoleManage) || !refreshed.HasScope(iamservice.ScopeConversationRead) {
 		t.Fatalf("Authenticate() = %+v", refreshed)
 	}
 
 	created, err := roleService.Create(context.Background(), principal, iamdto.CreateRoleRequest{
 		Name:   "运营",
 		Status: "active",
-		Scopes: []string{"conversation:manage"},
+		Scopes: []string{iamservice.ScopeConversationManage},
 	})
 	if err != nil || created.Kind != "custom" {
 		t.Fatalf("Create() = %+v, error = %v", created, err)
@@ -64,7 +78,7 @@ func TestRolePermissionsAffectAuthentication(t *testing.T) {
 		t.Fatalf("Login() error = %v", err)
 	}
 	custom, err := staffService.Accounts().Authenticate(context.Background(), memberLogin.Token.Token)
-	if err != nil || custom.HasScope(iamservice.ScopeIAMRoleManage) || !custom.HasScope("conversation:manage") {
+	if err != nil || custom.HasScope(iamservice.ScopeIAMRoleManage) || !custom.HasScope(iamservice.ScopeConversationManage) {
 		t.Fatalf("Authenticate() = %+v, error = %v", custom, err)
 	}
 }

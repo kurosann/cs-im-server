@@ -18,6 +18,7 @@ var _ commonmodule.IHTTPModule = (*Module)(nil)
 var _ commonmodule.IModuleDb = (*Module)(nil)
 
 type Module struct {
+	accounts      *iampkg.AccountService
 	realtime      *service.RealtimeService
 	apps          *service.AppService
 	customers     *service.CustomerService
@@ -26,6 +27,7 @@ type Module struct {
 }
 
 func (m *Module) Init(_ context.Context) error {
+	m.accounts = iampkg.Service()
 	m.realtime = service.NewRealtimeService()
 	m.apps = service.NewAppService(m.realtime)
 	m.customers = service.NewCustomerService(m.realtime)
@@ -76,7 +78,7 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	return commonmodule.HttpApiInfo{
 		Handlers: adminGroup.Handlers(),
 		Middlewares: []commonmodule.HttpMiddleware{
-			iamhttp.AccountTokenMiddleware(),
+			iamhttp.AccountTokenMiddleware(m.accounts),
 			iamhttp.RequirePrincipalKind(iampkg.PrincipalKindHuman),
 			iamhttp.RequirePrincipalScope(iampkg.ScopeGatewayAdmin),
 		},
