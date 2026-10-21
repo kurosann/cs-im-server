@@ -11,7 +11,11 @@ import (
 	"vane-common/pkg/dataaccess"
 )
 
-type AuditContextKey struct{}
+type auditContextKey struct{}
+
+type AuditContextSetter interface {
+	SetValue(key, value any)
+}
 
 type AuditService struct {
 	logs dataaccess.DataAccessor[*model.AuditLog]
@@ -21,12 +25,16 @@ func NewAuditService() *AuditService {
 	return &AuditService{}
 }
 
-func WithAuditContext(ctx context.Context, requestContext iamdto.AuditContext) context.Context {
-	return context.WithValue(ctx, AuditContextKey{}, requestContext)
+func SetAuditContext(ctx AuditContextSetter, requestContext iamdto.AuditContext) {
+	ctx.SetValue(auditContextKey{}, requestContext)
+}
+
+func SetAuditContextValue(ctx context.Context, requestContext iamdto.AuditContext) context.Context {
+	return context.WithValue(ctx, auditContextKey{}, requestContext)
 }
 
 func AuditContextFromContext(ctx context.Context) (iamdto.AuditContext, bool) {
-	requestContext, ok := ctx.Value(AuditContextKey{}).(iamdto.AuditContext)
+	requestContext, ok := ctx.Value(auditContextKey{}).(iamdto.AuditContext)
 	return requestContext, ok
 }
 
@@ -55,7 +63,7 @@ func (s *AuditService) Record(ctx context.Context, principal iamprincipal.Princi
 }
 
 func (s *AuditService) List(ctx context.Context, principal iamprincipal.Principal, filter iamdto.AuditFilter) (iamdto.AuditPage, error) {
-	if principal.Kind != iamprincipal.KindHuman || !principal.HasScope("audit:read") {
+	if principal.Kind != iamprincipal.KindHuman || !principal.HasScope(ScopeAuditRead) {
 		return iamdto.AuditPage{}, forbidden("principal cannot read audit logs")
 	}
 	conditions := []dataaccess.QueryCondition{

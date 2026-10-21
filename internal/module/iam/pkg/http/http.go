@@ -6,19 +6,18 @@ import (
 
 	iamdto "cs-im-server/internal/module/iam/dto"
 	service "cs-im-server/internal/module/iam/internal/service"
-	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	iamprincipal "cs-im-server/internal/module/iam/pkg/principal"
 	commonmodule "vane-common/module"
 )
 
-func AccountTokenMiddleware() commonmodule.HttpMiddleware {
+func AccountTokenMiddleware(accounts *service.AccountService) commonmodule.HttpMiddleware {
 	return func(next commonmodule.HttpHandler) commonmodule.HttpHandler {
 		return func(ctx commonmodule.HttpReqContext) {
 			token := strings.TrimPrefix(ctx.Header("Authorization"), "Bearer ")
 			if token == "" {
 				token = ctx.Header("X-Access-Token")
 			}
-			principal, err := iampkg.Service().Authenticate(ctx.Context(), token)
+			principal, err := accounts.Authenticate(ctx.Context(), token)
 			if err != nil {
 				_ = ctx.JSON(nethttp.StatusUnauthorized, map[string]any{
 					"code":    "UNAUTHORIZED",
@@ -26,8 +25,8 @@ func AccountTokenMiddleware() commonmodule.HttpMiddleware {
 				})
 				return
 			}
-			ctx.SetValue(iamprincipal.ContextKey{}, principal)
-			ctx.SetValue(service.AuditContextKey{}, iamdto.AuditContext{
+			iamprincipal.SetValue(ctx, principal)
+			service.SetAuditContext(ctx, iamdto.AuditContext{
 				Device: ctx.Header("User-Agent"),
 				IP:     ctx.ClientIP(),
 			})

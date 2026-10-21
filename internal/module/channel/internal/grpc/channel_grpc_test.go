@@ -63,7 +63,7 @@ func setupChannelGateway(t *testing.T) channelGatewayFixture {
 	if err != nil {
 		t.Fatalf("register app: %v", err)
 	}
-	accounts := iampkg.NewAccountService("bootstrap-token", "tenant_1")
+	accounts := iampkg.NewAccountService()
 	credential, err := accounts.IssueChannelCredential(
 		context.Background(),
 		iampkg.Principal{

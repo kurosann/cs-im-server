@@ -12,7 +12,6 @@ import (
 
 type (
 	Principal                     = iamprincipal.Principal
-	PrincipalContextKey           = iamprincipal.ContextKey
 	AccountService                = service.AccountService
 	AccountTokenInfo              = iamdto.AccountTokenInfo
 	IssueAccountTokenRequest      = iamdto.IssueAccountTokenRequest
@@ -25,14 +24,19 @@ type (
 )
 
 const (
-	PrincipalKindBusiness = iamprincipal.KindBusiness
-	PrincipalKindRelay    = iamprincipal.KindRelay
-	ScopeAll              = service.ScopeAll
-	ScopeGatewayAdmin     = service.ScopeGatewayAdmin
-	ScopeIAMTokenManage   = service.ScopeIAMTokenManage
-	ScopeChannelAccess    = service.ScopeChannelAccess
-	ScopeRelayAccess      = service.ScopeRelayAccess
-	PrincipalKindHuman    = iamprincipal.KindHuman
+	PrincipalKindBusiness   = iamprincipal.KindBusiness
+	PrincipalKindRelay      = iamprincipal.KindRelay
+	ScopeAll                = service.ScopeAll
+	ScopeGatewayAdmin       = service.ScopeGatewayAdmin
+	ScopeIAMTokenManage     = service.ScopeIAMTokenManage
+	ScopeIAMRoleManage      = service.ScopeIAMRoleManage
+	ScopeChannelAccess      = service.ScopeChannelAccess
+	ScopeRelayAccess        = service.ScopeRelayAccess
+	ScopeConversationRead   = service.ScopeConversationRead
+	ScopeConversationManage = service.ScopeConversationManage
+	ScopeMessageSendAgent   = service.ScopeMessageSendAgent
+	ScopeAuditRead          = service.ScopeAuditRead
+	PrincipalKindHuman      = iamprincipal.KindHuman
 )
 
 var ErrPrincipalMissing = iamprincipal.ErrMissing
@@ -71,12 +75,8 @@ func StaffService() *service.StaffService {
 	return staffService
 }
 
-func NewAccountService(bootstrapToken, tenantID string) *AccountService {
-	return service.NewAccountService(bootstrapToken, tenantID)
-}
-
-func WithPrincipal(ctx context.Context, principal Principal) context.Context {
-	return iamprincipal.WithPrincipal(ctx, principal)
+func NewAccountService() *AccountService {
+	return service.NewAccountService()
 }
 
 func PrincipalFromContext(ctx context.Context) (Principal, bool) {

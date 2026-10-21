@@ -22,26 +22,20 @@ import (
 const sessionTTL = 7 * 24 * time.Hour
 
 type StaffService struct {
-	users          dataaccess.DataAccessor[*model.User]
-	roles          dataaccess.DataAccessor[*model.Role]
-	tenants        dataaccess.DataAccessor[*model.Tenant]
-	accounts       *AccountService
-	audit          *AuditService
-	adminEmail     string
-	adminPassword  string
-	bootstrapTenan string
+	users    dataaccess.DataAccessor[*model.User]
+	roles    dataaccess.DataAccessor[*model.Role]
+	tenants  dataaccess.DataAccessor[*model.Tenant]
+	accounts *AccountService
+	audit    *AuditService
 }
 
-func NewStaffService(accounts *AccountService, adminEmail, adminPassword, tenantID string) *StaffService {
+func NewStaffService(accounts *AccountService) *StaffService {
 	return &StaffService{
-		users:          dataaccess.DataAccessor[*model.User]{},
-		roles:          dataaccess.DataAccessor[*model.Role]{},
-		tenants:        dataaccess.DataAccessor[*model.Tenant]{},
-		accounts:       accounts,
-		audit:          accounts.audit,
-		adminEmail:     strings.ToLower(strings.TrimSpace(adminEmail)),
-		adminPassword:  adminPassword,
-		bootstrapTenan: tenantID,
+		users:    dataaccess.DataAccessor[*model.User]{},
+		roles:    dataaccess.DataAccessor[*model.Role]{},
+		tenants:  dataaccess.DataAccessor[*model.Tenant]{},
+		accounts: accounts,
+		audit:    accounts.audit,
 	}
 }
 
@@ -128,13 +122,17 @@ func (s *StaffService) Login(ctx context.Context, req iamdto.LoginRequest, sessi
 	if err != nil {
 		return iamdto.LoginResult{}, err
 	}
+	sessionScopes, err := s.accounts.RoleScopes(ctx, user.TenantID, user.Role)
+	if err != nil {
+		return iamdto.LoginResult{}, err
+	}
 	session := &model.AccountToken{
 		TokenKey:   tokenKey,
 		AccountKey: user.UserKey,
 		Name:       user.DisplayName,
 		TenantID:   user.TenantID,
 		Kind:       iamprincipal.KindHuman,
-		ScopesJSON: encodeScopes(roleScopes(user.Role)),
+		ScopesJSON: encodeScopes(sessionScopes),
 		TokenHash:  hashToken(secret),
 		Device:     sessionContext.Device,
 		IP:         sessionContext.IP,
@@ -478,42 +476,7 @@ func (s *StaffService) findUser(ctx context.Context, identifier string) (*model.
 	if !errors.Is(err, dataaccess.ErrDataNotFound) {
 		return nil, err
 	}
-	if identifier == s.adminEmail {
-		if err := s.ensureAdminUser(ctx); err != nil {
-			return nil, err
-		}
-		return s.users.First(ctx, dataaccess.Eq("email", identifier))
-	}
 	return s.users.First(ctx, dataaccess.Eq("account", identifier))
-}
-
-func (s *StaffService) ensureAdminUser(ctx context.Context) error {
-	existing, err := s.users.List(ctx)
-	if err != nil {
-		return err
-	}
-	if len(existing) > 0 {
-		return nil
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(s.adminPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-	userKey, err := generateUserKey()
-	if err != nil {
-		return err
-	}
-	admin := &model.User{
-		UserKey:      userKey,
-		Account:      "admin",
-		Email:        s.adminEmail,
-		DisplayName:  "系统管理员",
-		PasswordHash: string(hash),
-		TenantID:     s.bootstrapTenan,
-		Role:         "admin",
-		Status:       "active",
-	}
-	return s.users.Create(ctx, admin)
 }
 
 func generateUserKey() (string, error) {
@@ -532,20 +495,20 @@ func generateStaffAccount() (string, error) {
 	return "staff_" + hex.EncodeToString(key), nil
 }
 
-func roleScopes(role string) []string {
+func builtinRoleScopes(role string) []string {
 	switch role {
 	case "owner":
-		return []string{ScopeAll, ScopeGatewayAdmin, ScopeIAMTokenManage, ScopeIAMUserManage, "conversation:read", "conversation:manage", "message:send:agent", "audit:read"}
+		return []string{ScopeAll, ScopeGatewayAdmin, ScopeIAMTokenManage, ScopeIAMUserManage, ScopeConversationRead, ScopeConversationManage, ScopeMessageSendAgent, ScopeAuditRead}
 	case "admin":
-		return []string{ScopeGatewayAdmin, ScopeIAMTokenManage, ScopeIAMUserManage, ScopeIAMRoleManage, "conversation:read", "conversation:manage", "message:send:agent", "audit:read"}
+		return []string{ScopeGatewayAdmin, ScopeIAMTokenManage, ScopeIAMUserManage, ScopeIAMRoleManage, ScopeRelayAccess, ScopeConversationRead, ScopeConversationManage, ScopeMessageSendAgent, ScopeAuditRead}
 	case "supervisor":
-		return []string{ScopeGatewayAdmin, "conversation:read", "conversation:manage", "message:send:agent", "audit:read"}
+		return []string{ScopeGatewayAdmin, ScopeRelayAccess, ScopeConversationRead, ScopeConversationManage, ScopeMessageSendAgent, ScopeAuditRead}
 	case "auditor":
-		return []string{"audit:read"}
+		return []string{ScopeAuditRead}
 	case "developer":
-		return []string{"channel:access", "conversation:read", "audit:read"}
+		return []string{ScopeChannelAccess, ScopeRelayAccess, ScopeConversationRead, ScopeAuditRead}
 	default:
-		return []string{"conversation:read", "conversation:manage", "message:send:agent"}
+		return nil
 	}
 }
 

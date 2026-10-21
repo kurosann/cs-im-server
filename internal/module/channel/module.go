@@ -15,15 +15,20 @@ import (
 var _ commonmodule.IModule = (*Module)(nil)
 var _ commonmodule.IHTTPModule = (*Module)(nil)
 
-type Module struct{}
+type Module struct {
+	accounts *iampkg.AccountService
+}
 
-func (m *Module) Init(_ context.Context) error { return nil }
+func (m *Module) Init(_ context.Context) error {
+	m.accounts = iampkg.Service()
+	return nil
+}
 
 func (m *Module) Model() []commonmodule.ModelRegInfo { return nil }
 
 func (m *Module) Api() []commonmodule.ApiRegInfo {
 	channelGateway := grpc.NewChannelGatewayGRPCAPI(
-		iampkg.Service(),
+		m.accounts,
 		gatewaypkg.GetAppAuthorizer(),
 		gatewaypkg.GetConversationIngress(),
 		gatewaypkg.GetMessageIngress(),
@@ -47,7 +52,7 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	return commonmodule.HttpApiInfo{
 		Handlers: routes.Handlers(),
 		Middlewares: []commonmodule.HttpMiddleware{
-			iamhttp.AccountTokenMiddleware(),
+			iamhttp.AccountTokenMiddleware(m.accounts),
 			iamhttp.RequirePrincipalKind(iampkg.PrincipalKindBusiness),
 			iamhttp.RequirePrincipalScope(iampkg.ScopeChannelAccess),
 		},

@@ -25,11 +25,6 @@ log:
   hide_console: false
   console_encode: true
 
-access:
-  account_token: "dev-access-token"
-  relay_token: "dev-relay-token"
-  tenant_id: "dev-tenant"
-
 http:
   host: "127.0.0.1"
   port: 8080

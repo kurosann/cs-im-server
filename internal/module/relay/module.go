@@ -19,14 +19,18 @@ var _ commonmodule.IModule = (*Module)(nil)
 var _ commonmodule.IHTTPModule = (*Module)(nil)
 var _ commonmodule.IModuleDb = (*Module)(nil)
 
-type Module struct{}
+type Module struct {
+	accounts *iampkg.AccountService
+	relay    *relayService.RelayService
+}
 
 func (m *Module) Init(_ context.Context) error {
-	service := relayService.NewRelayService(gatewaypkg.GetRealtimePublisher())
-	if err := service.Load(); err != nil {
+	m.accounts = iampkg.Service()
+	m.relay = relayService.NewRelayService(gatewaypkg.GetRealtimePublisher())
+	if err := m.relay.Load(); err != nil {
 		return err
 	}
-	relaypkg.SetService(service)
+	relaypkg.SetService(m.relay)
 	return nil
 }
 
@@ -47,7 +51,7 @@ func (m *Module) Api() []commonmodule.ApiRegInfo {
 	return []commonmodule.ApiRegInfo{
 		commonmodule.NewApiRegInfo(
 			relayv1.RelayChannelService_ServiceDesc,
-			relaygrpc.NewRelayChannelGRPCAPI(iampkg.Service(), relaypkg.Service()),
+			relaygrpc.NewRelayChannelGRPCAPI(m.accounts, m.relay),
 		),
 	}
 }
@@ -55,9 +59,9 @@ func (m *Module) Job() []commonmodule.JobRegInfo   { return nil }
 func (m *Module) Task() []commonmodule.TaskRegInfo { return nil }
 
 func (m *Module) HttpApi() commonmodule.HttpApiInfo {
-	channels := relayhttp.NewChannelAPI(relaypkg.Service())
-	webhooks := relayhttp.NewWebhookAPI(relaypkg.Service())
-	ai := relayhttp.NewAIAPI(relaypkg.Service())
+	channels := relayhttp.NewChannelAPI(m.relay)
+	webhooks := relayhttp.NewWebhookAPI(m.relay)
+	ai := relayhttp.NewAIAPI(m.relay)
 	realtime := relayhttp.NewRealtimeAPI(gatewaypkg.GetAppAuthorizer(), gatewaypkg.GetMessageIngress(), gatewaypkg.GetRealtimeSubscriber())
 	relayMessages := relayhttp.NewRelayMessageAPI(gatewaypkg.GetMessageEgress(), gatewaypkg.GetRealtimeSubscriber())
 	admin := commonmodule.NewHttpRouteGroup("/admin/v1").
@@ -66,6 +70,6 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	relayEvents := relayMessages.Routes()
 	return commonmodule.HttpApiInfo{
 		Handlers:    commonmodule.MergeHandlers(admin.Handlers(), channelEvents.Handlers(), relayEvents.Handlers()),
-		Middlewares: []commonmodule.HttpMiddleware{iamhttp.AccountTokenMiddleware()},
+		Middlewares: []commonmodule.HttpMiddleware{iamhttp.AccountTokenMiddleware(m.accounts)},
 	}
 }
