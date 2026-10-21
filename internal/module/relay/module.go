@@ -53,6 +53,26 @@ func (m *Module) Api() []commonmodule.ApiRegInfo {
 			relayv1.RelayChannelService_ServiceDesc,
 			relaygrpc.NewRelayChannelGRPCAPI(m.accounts, m.relay),
 		),
+		commonmodule.NewApiRegInfo(
+			relayv1.RelayAccessService_ServiceDesc,
+			relaygrpc.NewRelayAccessGRPCAPI(
+				m.accounts,
+				gatewaypkg.GetMessageEgress(),
+				gatewaypkg.GetRealtimeSubscriber(),
+			),
+		),
+		commonmodule.NewApiRegInfo(
+			relayv1.RelayEmployeeService_ServiceDesc,
+			relaygrpc.NewRelayEmployeeGRPCAPI(m.accounts, m.relay),
+		),
+		commonmodule.NewApiRegInfo(
+			relayv1.RelayWebhookService_ServiceDesc,
+			relaygrpc.NewRelayWebhookGRPCAPI(m.accounts, m.relay),
+		),
+		commonmodule.NewApiRegInfo(
+			relayv1.RelayAIService_ServiceDesc,
+			relaygrpc.NewRelayAIGRPCAPI(m.accounts, m.relay),
+		),
 	}
 }
 func (m *Module) Job() []commonmodule.JobRegInfo   { return nil }

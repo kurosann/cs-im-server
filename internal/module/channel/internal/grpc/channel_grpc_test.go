@@ -115,6 +115,16 @@ func TestChannelGatewayCustomerBoundary(t *testing.T) {
 		t.Fatalf("EnsureConversation() = %+v", conversation)
 	}
 
+	fetched, err := fixture.api.GetConversation(ctx, &gatewayv1.GetConversationRequest{
+		AppId: fixture.appID, ConversationId: fixture.conversationID,
+	})
+	if err != nil {
+		t.Fatalf("GetConversation() error = %v", err)
+	}
+	if fetched.ConversationId != fixture.conversationID || fetched.CustomerId != conversation.CustomerId {
+		t.Fatalf("GetConversation() = %+v", fetched)
+	}
+
 	sentAt := time.Now().UTC().Format(time.RFC3339Nano)
 	agentRequest := &gatewayv1.SendMessageRequest{
 		AppId: fixture.appID, ConversationId: conversation.ConversationId,
