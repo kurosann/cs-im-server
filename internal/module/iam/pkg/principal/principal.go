@@ -20,22 +20,14 @@ type Principal struct {
 	TokenKey   string
 }
 
-type contextKey struct{}
-
-type ValueSetter interface {
-	SetValue(key, value any)
-}
+type ContextKey struct{}
 
 const scopeWildcard = "*"
 
 var ErrMissing = errors.New("principal is missing")
 
-func SetValue(ctx ValueSetter, principal Principal) {
-	ctx.SetValue(contextKey{}, principal)
-}
-
 func FromContext(ctx context.Context) (Principal, bool) {
-	principal, ok := ctx.Value(contextKey{}).(Principal)
+	principal, ok := ctx.Value(ContextKey{}).(Principal)
 	return principal, ok
 }
 

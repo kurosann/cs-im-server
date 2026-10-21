@@ -11,11 +11,7 @@ import (
 	"vane-common/pkg/dataaccess"
 )
 
-type auditContextKey struct{}
-
-type AuditContextSetter interface {
-	SetValue(key, value any)
-}
+type AuditContextKey struct{}
 
 type AuditService struct {
 	logs dataaccess.DataAccessor[*model.AuditLog]
@@ -25,16 +21,12 @@ func NewAuditService() *AuditService {
 	return &AuditService{}
 }
 
-func SetAuditContext(ctx AuditContextSetter, requestContext iamdto.AuditContext) {
-	ctx.SetValue(auditContextKey{}, requestContext)
-}
-
-func SetAuditContextValue(ctx context.Context, requestContext iamdto.AuditContext) context.Context {
-	return context.WithValue(ctx, auditContextKey{}, requestContext)
+func WithAuditContext(ctx context.Context, requestContext iamdto.AuditContext) context.Context {
+	return context.WithValue(ctx, AuditContextKey{}, requestContext)
 }
 
 func AuditContextFromContext(ctx context.Context) (iamdto.AuditContext, bool) {
-	requestContext, ok := ctx.Value(auditContextKey{}).(iamdto.AuditContext)
+	requestContext, ok := ctx.Value(AuditContextKey{}).(iamdto.AuditContext)
 	return requestContext, ok
 }
 

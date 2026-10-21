@@ -59,7 +59,7 @@ func (a *AuthAPI) Login(ctx httpapi.Context) {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
 	}
-	requestContext := service.SetAuditContextValue(ctx.Context(), iamdto.AuditContext{
+	requestContext := service.WithAuditContext(ctx.Context(), iamdto.AuditContext{
 		Device: ctx.Header("User-Agent"),
 		IP:     ctx.ClientIP(),
 	})

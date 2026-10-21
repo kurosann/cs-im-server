@@ -25,8 +25,8 @@ func AccountTokenMiddleware(accounts *service.AccountService) commonmodule.HttpM
 				})
 				return
 			}
-			iamprincipal.SetValue(ctx, principal)
-			service.SetAuditContext(ctx, iamdto.AuditContext{
+			ctx.SetValue(iamprincipal.ContextKey{}, principal)
+			ctx.SetValue(service.AuditContextKey{}, iamdto.AuditContext{
 				Device: ctx.Header("User-Agent"),
 				IP:     ctx.ClientIP(),
 			})
