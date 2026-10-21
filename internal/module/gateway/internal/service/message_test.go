@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	gatewaymodel "cs-im-server/internal/module/gateway/internal/model"
 	"vane-common/pkg/dataaccess"
 	"vane-common/pkg/dataaccess/store"
@@ -37,6 +39,48 @@ func addTestMessage(t *testing.T, messages *MessageService, message *Message) {
 	messages.messages[message.MessageKey] = message
 	if message.Seq > messages.conversationSeq[message.ConversationKey] {
 		messages.conversationSeq[message.ConversationKey] = message.Seq
+	}
+}
+
+func TestCreateNotifiesCustomerMessagesOnly(t *testing.T) {
+	messages := setupMessageService(t)
+	conversations := NewConversationService(nil, nil, nil, NewRealtimeService())
+	conversations.SetForTest(Conversation{ConversationKey: "conv_1", CustomerKey: "cus_1", Status: "open", AppKey: "app_1"})
+	messages.conversations = conversations
+	notified := make(chan string, 2)
+	messages.SetCustomerObserver(func(message Message) {
+		notified <- message.SenderRole
+	})
+
+	if _, err := messages.CreateAIReply(context.Background(), "conv_1", "emp_1", "自动回复"); err != nil {
+		t.Fatalf("CreateAIReply() error = %v", err)
+	}
+	select {
+	case role := <-notified:
+		t.Fatalf("ai reply notified observer: %s", role)
+	case <-time.After(30 * time.Millisecond):
+	}
+
+	created, err := messages.Create(context.Background(), gatewaydto.CreateMessageRequest{
+		ConversationKey: "conv_1",
+		CustomerID:      "cus_1",
+		Sender:          MessageSender{Role: "customer", ID: "cus_1"},
+		Type:            "text",
+		Text:            "你好",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	select {
+	case role := <-notified:
+		if role != "customer" {
+			t.Fatalf("observer role = %s", role)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("customer message %s was not observed", created.MessageKey)
+	}
+	if !messages.RelayEventAllowed(RealtimeEvent{Type: "message.created", Data: Message{SenderRole: "ai"}}) {
+		t.Fatal("relay stream did not allow ai replies")
 	}
 }
 

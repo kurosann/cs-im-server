@@ -6,6 +6,7 @@ import (
 
 	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
+	"cs-im-server/internal/module/relay/internal/gatewaybridge"
 	relaygrpc "cs-im-server/internal/module/relay/internal/grpc"
 	relayhttp "cs-im-server/internal/module/relay/internal/http"
 	relaymodel "cs-im-server/internal/module/relay/internal/model"
@@ -27,6 +28,7 @@ func (m *Module) Init(_ context.Context) error {
 		return err
 	}
 	relaypkg.SetService(service)
+	gatewaybridge.Register(service)
 	return nil
 }
 
@@ -39,6 +41,9 @@ func (m *Module) Model() []commonmodule.ModelRegInfo {
 		commonmodule.NewModelRegInfo(&relaymodel.AIEmployee{}),
 		commonmodule.NewModelRegInfo(&relaymodel.AIEmployeeBinding{}),
 		commonmodule.NewModelRegInfo(&relaymodel.AIEmployeeExecution{}),
+		commonmodule.NewModelRegInfo(&relaymodel.KnowledgeGroup{}),
+		commonmodule.NewModelRegInfo(&relaymodel.KnowledgeBase{}),
+		commonmodule.NewModelRegInfo(&relaymodel.KnowledgeDoc{}),
 		commonmodule.NewModelRegInfo(&relaymodel.Delivery{}),
 	}
 }
@@ -58,11 +63,12 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	channels := relayhttp.NewChannelAPI(relaypkg.Service())
 	webhooks := relayhttp.NewWebhookAPI(relaypkg.Service())
 	ai := relayhttp.NewAIAPI(relaypkg.Service())
+	knowledge := relayhttp.NewKnowledgeAPI(relaypkg.Service())
 	realtime := relayhttp.NewRealtimeAPI(gatewaypkg.GetAppAuthorizer(), gatewaypkg.GetMessageIngress(), gatewaypkg.GetRealtimeSubscriber())
 	relayMessages := relayhttp.NewRelayMessageAPI(gatewaypkg.GetMessageEgress(), gatewaypkg.GetRealtimeSubscriber())
 	admin := commonmodule.NewHttpRouteGroup("/admin/v1").
 		Compose(channels.Routes(), webhooks.Routes(), ai.Routes())
-	channelEvents := commonmodule.NewHttpRouteGroup("/api/v1").Compose(realtime.Routes(), ai.EmployeeRoutes())
+	channelEvents := commonmodule.NewHttpRouteGroup("/api/v1").Compose(realtime.Routes(), ai.EmployeeRoutes(), knowledge.Routes())
 	relayEvents := relayMessages.Routes()
 	return commonmodule.HttpApiInfo{
 		Handlers:    commonmodule.MergeHandlers(admin.Handlers(), channelEvents.Handlers(), relayEvents.Handlers()),

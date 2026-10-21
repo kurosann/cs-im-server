@@ -537,7 +537,7 @@ func roleScopes(role string) []string {
 	case "owner":
 		return []string{ScopeAll, ScopeGatewayAdmin, ScopeIAMTokenManage, ScopeIAMUserManage, "conversation:read", "conversation:manage", "message:send:agent", "audit:read"}
 	case "admin":
-		return []string{ScopeGatewayAdmin, ScopeIAMTokenManage, ScopeIAMUserManage, ScopeIAMRoleManage, "conversation:read", "conversation:manage", "message:send:agent", "audit:read"}
+		return []string{ScopeGatewayAdmin, ScopeIAMTokenManage, ScopeIAMUserManage, ScopeIAMRoleManage, ScopeChannelAccess, ScopeRelayAccess, "conversation:read", "conversation:manage", "message:send:agent", "audit:read"}
 	case "supervisor":
 		return []string{ScopeGatewayAdmin, "conversation:read", "conversation:manage", "message:send:agent", "audit:read"}
 	case "auditor":

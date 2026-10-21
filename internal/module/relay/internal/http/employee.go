@@ -37,7 +37,7 @@ func (a *AIAPI) CreateEmployee(ctx httpapi.Context) {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", "请求格式不正确")
 		return
 	}
-	item, err := a.Service.CreateEmployee(ctx.Context(), principal.AccountKey, req)
+	item, err := a.Service.CreateEmployee(ctx.Context(), principal.AccountKey, principal.TenantID, req)
 	if err != nil {
 		writeServiceError(ctx, err)
 		return
@@ -100,6 +100,24 @@ func (a *AIAPI) ListEmployeeExecutions(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", items)
 }
 
+func (a *AIAPI) TestEmployee(ctx httpapi.Context) {
+	principal, ok := employeePrincipal(ctx)
+	if !ok {
+		return
+	}
+	var req service.TestEmployeeRequest
+	if err := ctx.BindJSON(&req); err != nil {
+		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", "请求格式不正确")
+		return
+	}
+	item, err := a.Service.TestEmployee(ctx.Context(), principal.AccountKey, principal.TenantID, ctx.Param("id"), req)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", item)
+}
+
 func (a *AIAPI) ListEmployeeChannels(ctx httpapi.Context) {
 	principal, ok := employeePrincipal(ctx)
 	if !ok {
@@ -120,6 +138,7 @@ func (a *AIAPI) EmployeeRoutes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/ai")
 	routes.Get("/employees", a.ListEmployees)
 	routes.Get("/employees/:id/executions", a.ListEmployeeExecutions)
+	routes.Post("/employees/:id/test", a.TestEmployee)
 	routes.Post("/employees", a.CreateEmployee)
 	routes.Patch("/employees/:id", a.UpdateEmployee)
 	routes.Delete("/employees/:id", a.DeleteEmployee)

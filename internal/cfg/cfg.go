@@ -31,6 +31,7 @@ type ConfigRoot struct {
 	Access   AccessConfig       `yaml:"access"`
 	HTTP     HTTPListenerConfig `yaml:"http"`
 	Database DatabaseConfig     `yaml:"database"`
+	AI       AIModelConfig      `yaml:"ai"`
 }
 
 type ServerConfig struct {
@@ -70,6 +71,16 @@ type HTTPListenerConfig struct {
 
 type DatabaseConfig struct {
 	DSN string `yaml:"dsn"`
+}
+
+// AIModelConfig is the OpenAI-compatible MiniMax chat endpoint.
+// APIKey comes from CS_IM_AI_API_KEY, or from a gitignored .env when that variable is empty.
+// It is never read from YAML.
+type AIModelConfig struct {
+	Endpoint       string `yaml:"endpoint"`
+	Model          string `yaml:"model"`
+	TimeoutSeconds int    `yaml:"timeout_seconds"`
+	APIKey         string `yaml:"-"`
 }
 
 var appConfig *ConfigRoot
@@ -167,6 +178,15 @@ func applyDefaults(cfg *ConfigRoot) {
 	if cfg.Access.TenantID == "" {
 		cfg.Access.TenantID = "dev-tenant"
 	}
+	if cfg.AI.Endpoint == "" {
+		cfg.AI.Endpoint = "https://api.minimaxi.com/v1"
+	}
+	if cfg.AI.Model == "" {
+		cfg.AI.Model = "MiniMax-M3"
+	}
+	if cfg.AI.TimeoutSeconds <= 0 {
+		cfg.AI.TimeoutSeconds = 60
+	}
 }
 
 func injectEnv() {
@@ -205,6 +225,40 @@ func injectEnv() {
 	if value := os.Getenv("CS_IM_DB_DSN"); value != "" {
 		appConfig.Database.DSN = value
 	}
+	appConfig.AI.APIKey = aiAPIKey()
+}
+
+func aiAPIKey() string {
+	if value := strings.TrimSpace(os.Getenv("CS_IM_AI_API_KEY")); value != "" {
+		return value
+	}
+	for _, path := range []string{".env", "config/.env"} {
+		if value := dotenvValue(path, "CS_IM_AI_API_KEY"); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func dotenvValue(path, key string) string {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	prefix := key + "="
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		value := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		return strings.TrimSpace(strings.Trim(value, `"'`))
+	}
+	return ""
 }
 
 func GetServerConfig() serverconfig.Config {

@@ -19,7 +19,7 @@ func setupEmployees(t *testing.T) *RelayService {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	store.RegisterRelationDB("main", store.RelationStore{DB: db.DB, Closer: db})
-	if err := db.AutoMigrate(&Channel{}, &AIEmployee{}, &AIEmployeeBinding{}, &AIEmployeeExecution{}, &businessAppRow{}); err != nil {
+	if err := db.AutoMigrate(&Channel{}, &AIEmployee{}, &AIEmployeeBinding{}, &AIEmployeeExecution{}, &businessAppRow{}, &KnowledgeGroup{}, &KnowledgeBase{}, &KnowledgeDoc{}, &iamUserRow{}); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
 	return NewRelayService(realtimePublisherStub{})
@@ -51,7 +51,7 @@ func TestAIEmployeeAccountCRUD(t *testing.T) {
 		t.Fatalf("ListEmployees() empty = %+v, %v", empty, err)
 	}
 
-	created, err := service.CreateEmployee(ctx, "account-a", CreateEmployeeRequest{Name: " 新 AI 客服员工 "})
+	created, err := service.CreateEmployee(ctx, "account-a", "tenant-a", CreateEmployeeRequest{Name: " 新 AI 客服员工 "})
 	if err != nil {
 		t.Fatalf("CreateEmployee() error = %v", err)
 	}
@@ -59,10 +59,10 @@ func TestAIEmployeeAccountCRUD(t *testing.T) {
 		t.Fatalf("CreateEmployee() = %+v", created)
 	}
 
-	if _, err := service.CreateEmployee(ctx, "account-a", CreateEmployeeRequest{Name: "新 ai 客服员工"}); !isStatus(err, 409) {
+	if _, err := service.CreateEmployee(ctx, "account-a", "tenant-a", CreateEmployeeRequest{Name: "新 ai 客服员工"}); !isStatus(err, 409) {
 		t.Fatalf("duplicate name error = %v", err)
 	}
-	other, err := service.CreateEmployee(ctx, "account-b", CreateEmployeeRequest{Name: "新 AI 客服员工"})
+	other, err := service.CreateEmployee(ctx, "account-b", "tenant-b", CreateEmployeeRequest{Name: "新 AI 客服员工"})
 	if err != nil || other.EmployeeID == created.EmployeeID {
 		t.Fatalf("other account create = %+v, %v", other, err)
 	}
@@ -108,7 +108,7 @@ func TestAIEmployeeAccountCRUD(t *testing.T) {
 	}); !isStatus(err, 404) {
 		t.Fatalf("cross account update error = %v", err)
 	}
-	second, err := service.CreateEmployee(ctx, "account-a", CreateEmployeeRequest{Name: "售前助手"})
+	second, err := service.CreateEmployee(ctx, "account-a", "tenant-a", CreateEmployeeRequest{Name: "售前助手"})
 	if err != nil {
 		t.Fatalf("create second: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestAIEmployeeAccountCRUD(t *testing.T) {
 	if err != nil || len(remaining) != 1 || remaining[0].EmployeeID != second.EmployeeID {
 		t.Fatalf("list after delete = %+v, %v", remaining, err)
 	}
-	recreated, err := service.CreateEmployee(ctx, "account-a", CreateEmployeeRequest{Name: "售后专员"})
+	recreated, err := service.CreateEmployee(ctx, "account-a", "tenant-a", CreateEmployeeRequest{Name: "售后专员"})
 	if err != nil || recreated.EmployeeID == "" {
 		t.Fatalf("recreate deleted name = %+v, %v", recreated, err)
 	}
@@ -161,7 +161,7 @@ func TestEmployeeChannelsCollapseLegacyAccountRows(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create app: %v", err)
 	}
-	created, err := service.CreateEmployee(ctx, "account-a", CreateEmployeeRequest{Name: "售后专员"})
+	created, err := service.CreateEmployee(ctx, "account-a", "tenant-a", CreateEmployeeRequest{Name: "售后专员"})
 	if err != nil {
 		t.Fatalf("CreateEmployee() error = %v", err)
 	}

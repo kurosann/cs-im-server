@@ -9,11 +9,11 @@ import (
 func TestEmployeeExecutionsPersistAndIsolateByAccount(t *testing.T) {
 	ctx := context.Background()
 	service := setupEmployees(t)
-	first, err := service.CreateEmployee(ctx, "account-a", CreateEmployeeRequest{Name: "售后专员"})
+	first, err := service.CreateEmployee(ctx, "account-a", "tenant-a", CreateEmployeeRequest{Name: "售后专员"})
 	if err != nil {
 		t.Fatalf("create employee: %v", err)
 	}
-	other, err := service.CreateEmployee(ctx, "account-b", CreateEmployeeRequest{Name: "售后专员"})
+	other, err := service.CreateEmployee(ctx, "account-b", "tenant-b", CreateEmployeeRequest{Name: "售后专员"})
 	if err != nil {
 		t.Fatalf("create other employee: %v", err)
 	}

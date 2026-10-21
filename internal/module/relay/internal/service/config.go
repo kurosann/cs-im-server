@@ -20,6 +20,15 @@ type RelayService struct {
 	bindings         dataaccess.DataAccessor[*AIEmployeeBinding]
 	executions       dataaccess.DataAccessor[*AIEmployeeExecution]
 	apps             dataaccess.DataAccessor[*businessAppRow]
+	knowledgeGroups  dataaccess.DataAccessor[*KnowledgeGroup]
+	knowledgeBases   dataaccess.DataAccessor[*KnowledgeBase]
+	knowledgeDocs    dataaccess.DataAccessor[*KnowledgeDoc]
+	userTenants      dataaccess.DataAccessor[*iamUserRow]
+	completer        CompletionClient
+	inbound          InboundGateway
+	inboundMu        sync.Mutex
+	inboundPending   map[string]*inboundBatch
+	inboundLanes     map[string]*sync.Mutex
 	channels         map[string]*Channel
 	webhooks         map[string]*Webhook
 	aiConfigID       int64
@@ -318,5 +327,5 @@ func (s *RelayService) Load() error {
 		s.aiConfig = *aiConfigs[0]
 		s.aiConfigID = aiConfigs[0].ID
 	}
-	return nil
+	return s.backfillEmployeeTenants(context.Background())
 }

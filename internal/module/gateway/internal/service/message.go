@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,14 +15,15 @@ import (
 )
 
 type MessageService struct {
-	mu              sync.RWMutex
-	accessor        dataaccess.DataAccessor[*Message]
-	messages        map[string]*Message
-	sourceKeys      map[string]string
-	conversationSeq map[string]int64
-	apps            *AppService
-	conversations   *ConversationService
-	realtime        *RealtimeService
+	mu               sync.RWMutex
+	accessor         dataaccess.DataAccessor[*Message]
+	messages         map[string]*Message
+	sourceKeys       map[string]string
+	conversationSeq  map[string]int64
+	apps             *AppService
+	conversations    *ConversationService
+	realtime         *RealtimeService
+	customerObserver func(Message)
 }
 
 var messageStatuses = map[string]bool{
@@ -104,10 +106,11 @@ func (s *MessageService) Create(_ context.Context, req gatewaydto.CreateMessageR
 
 	sourceKey := messageSourceDedupKey(req.Source.AppID, req.Source.ExternalID)
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if sourceKey != "" {
 		if messageID, ok := s.sourceKeys[sourceKey]; ok {
-			return *s.messages[messageID], nil
+			existing := *s.messages[messageID]
+			s.mu.Unlock()
+			return existing, nil
 		}
 	}
 	seq := s.conversationSeq[conversation.ConversationKey] + 1
@@ -121,6 +124,7 @@ func (s *MessageService) Create(_ context.Context, req gatewaydto.CreateMessageR
 		SourceSentAt: req.Source.SentAt, SourceDedupKey: sourceKeyPtr, Type: req.Type, Text: req.Text, Media: req.Content, Status: "received",
 	}
 	if err := s.accessor.Save(context.Background(), message); err != nil {
+		s.mu.Unlock()
 		return Message{}, err
 	}
 	s.messages[message.MessageKey] = message
@@ -129,8 +133,49 @@ func (s *MessageService) Create(_ context.Context, req gatewaydto.CreateMessageR
 	}
 	s.conversationSeq[conversation.ConversationKey] = seq
 	result := *message
+	observer := s.customerObserver
 	s.realtime.Publish("message.created", message.MessageKey, result)
+	s.mu.Unlock()
+	if result.SenderRole == "customer" && observer != nil {
+		go observer(result)
+	}
 	return result, nil
+}
+
+func (s *MessageService) SetCustomerObserver(fn func(Message)) {
+	s.mu.Lock()
+	s.customerObserver = fn
+	s.mu.Unlock()
+}
+
+func (s *MessageService) CreateAIReply(_ context.Context, conversationID, employeeID, text string) (Message, error) {
+	employeeID = strings.TrimSpace(employeeID)
+	text = strings.TrimSpace(text)
+	if employeeID == "" {
+		return Message{}, badRequest("employee id is required")
+	}
+	if text == "" {
+		return Message{}, badRequest("text is required")
+	}
+	return s.Create(context.Background(), gatewaydto.CreateMessageRequest{
+		ConversationKey: conversationID,
+		Sender:          MessageSender{Role: "ai", ID: employeeID},
+		Type:            "text",
+		Text:            text,
+	})
+}
+
+func (s *MessageService) RecentMessages(_ context.Context, conversationID string, limit int) ([]Message, error) {
+	if _, err := s.conversations.Get(context.Background(), conversationID); err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return s.List(context.Background(), conversationID, 0, 0, limit), nil
 }
 
 func (s *MessageService) CreateChannelMessage(_ context.Context, appID string, req gatewaydto.CreateMessageRequest) (Message, error) {
@@ -191,7 +236,15 @@ func (s *MessageService) RelayEventAllowed(event RealtimeEvent) bool {
 		return true
 	case "message.created":
 		message, ok := event.Data.(Message)
-		return ok && message.SenderRole == "customer"
+		if !ok {
+			return false
+		}
+		switch message.SenderRole {
+		case "customer", "agent", "ai":
+			return true
+		default:
+			return false
+		}
 	default:
 		return false
 	}
