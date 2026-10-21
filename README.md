@@ -145,3 +145,6 @@ internal/module/<module>/internal/ # 模块私有 api、model、service
 internal/module/<module>/pkg/      # 模块对外最小能力
 pkg/consts/                   # 服务常量
 ```
+## LLM gateway
+
+Model routing and provider credentials live in the independent `config/llm.yaml` file. Leave its sample models disabled until you have set model IDs and the environment variables named by `api_key_env`. See [docs/llm-module.md](docs/llm-module.md) for providers, routes, MiniMax normalization, and configuration details.

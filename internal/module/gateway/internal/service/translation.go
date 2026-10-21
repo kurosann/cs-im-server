@@ -11,6 +11,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	llmpkg "cs-im-server/internal/module/llm/pkg"
 )
 
 const (
@@ -44,6 +46,12 @@ func (s *TranslationService) Translate(
 	}
 	if targetLang == "" || targetLang == "auto" {
 		targetLang = oppositeLanguage(text, sourceLang)
+	}
+	if llmClient, ok := llmpkg.TryGet(); ok && llmClient.TranslationSelector() != "" {
+		translated, llmErr := llmClient.TranslateText(ctx, text, sourceLang, targetLang)
+		if llmErr == nil && strings.TrimSpace(translated) != "" {
+			return strings.TrimSpace(translated), nil
+		}
 	}
 
 	requestCtx, cancel := context.WithTimeout(ctx, serverTranslationTimeout)

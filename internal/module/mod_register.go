@@ -4,6 +4,7 @@ import (
 	"cs-im-server/internal/module/channel"
 	"cs-im-server/internal/module/gateway"
 	"cs-im-server/internal/module/iam"
+	"cs-im-server/internal/module/llm"
 	"cs-im-server/internal/module/relay"
 	"cs-im-server/internal/module/system"
 	commonmodule "vane-common/module"
@@ -14,6 +15,7 @@ func Modules() []commonmodule.ModuleInfo {
 		commonmodule.NewModule("system", system.NewSystemModule()),
 		commonmodule.NewModule("iam", &iam.Module{}),
 		commonmodule.NewModule("gateway", &gateway.Module{}),
+		commonmodule.NewModule("llm", llm.NewModule("")),
 		commonmodule.NewModule("relay", &relay.Module{}),
 		commonmodule.NewModule("channel", &channel.Module{}),
 	}
