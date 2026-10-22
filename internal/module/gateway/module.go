@@ -23,6 +23,7 @@ type Module struct {
 	customers     *service.CustomerService
 	conversations *service.ConversationService
 	messages      *service.MessageService
+	translation   *service.TranslationService
 }
 
 func (m *Module) Init(_ context.Context) error {
@@ -31,6 +32,7 @@ func (m *Module) Init(_ context.Context) error {
 	m.customers = service.NewCustomerService(m.realtime)
 	m.conversations = service.NewConversationService(m.apps, m.customers, nil, m.realtime)
 	m.messages = service.NewMessageService(m.apps, m.conversations, m.realtime)
+	m.translation = service.NewTranslationService()
 	m.conversations.SetMessages(service.NewConversationMessageStore(m.messages))
 	gatewayruntime.SetCapabilities(m.apps, m.conversations, m.messages, m.realtime, m.realtime, m.messages)
 
@@ -62,6 +64,7 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	messageAPI := api.NewMessageAPI(m.messages)
 	realtimeAPI := api.NewRealtimeAPI(m.realtime, m.conversations)
 	monitorAPI := api.NewMonitorAPI(m.apps, m.conversations)
+	translationAPI := api.NewTranslationAPI(m.translation)
 
 	adminGroup := commonmodule.NewHttpRouteGroup("/admin/v1").Compose(
 		appAPI.AdminRoutes(),
@@ -71,6 +74,7 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 		messageAPI.AdminConversationRoutes(),
 		realtimeAPI.AdminRoutes(),
 		monitorAPI.AdminRoutes(),
+		translationAPI.Routes(),
 	)
 
 	return commonmodule.HttpApiInfo{
