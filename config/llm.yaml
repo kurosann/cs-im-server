@@ -1,0 +1,62 @@
+# Standalone LLM gateway configuration. Keep API keys in environment variables.
+enabled: false
+default_translation_model: ""
+max_request_bytes: 1048576
+max_response_bytes: 16777216
+
+models:
+  openai-default:
+    disabled: true
+    provider: openai
+    endpoint: https://api.openai.com/v1
+    model: CHANGE_ME
+    api_key_env: OPENAI_API_KEY
+    timeout_seconds: 60
+    max_tokens: 8192
+
+  volcengine-default:
+    disabled: true
+    provider: volcengine
+    endpoint: https://ark.cn-beijing.volces.com/api/v3
+    model: CHANGE_ME
+    api_key_env: ARK_API_KEY
+    timeout_seconds: 60
+    max_tokens: 8192
+
+  minimax-default:
+    disabled: true
+    provider: minimax
+    endpoint: https://api.minimax.io/v1
+    model: MiniMax-M3
+    api_key_env: MINIMAX_API_KEY
+    timeout_seconds: 60
+    max_tokens: 8192
+
+  anthropic-default:
+    disabled: true
+    provider: anthropic
+    endpoint: https://api.anthropic.com/v1
+    model: CHANGE_ME
+    api_key_env: ANTHROPIC_API_KEY
+    anthropic_version: "2023-06-01"
+    timeout_seconds: 60
+    max_tokens: 8192
+
+  aliyun-default:
+    disabled: true
+    provider: aliyun
+    endpoint: https://dashscope.aliyuncs.com/compatible-mode/v1
+    model: CHANGE_ME
+    api_key_env: DASHSCOPE_API_KEY
+    timeout_seconds: 60
+    max_tokens: 8192
+
+  opencode-default:
+    disabled: true
+    provider: opencode
+    endpoint: https://opencode.ai/zen/go/v1
+    model: CHANGE_ME
+    api_key_env: OPENCODE_API_KEY
+    timeout_seconds: 60
+    max_tokens: 8192
+    opencode_session_header: true
