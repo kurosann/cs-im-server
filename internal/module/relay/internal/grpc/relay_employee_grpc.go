@@ -139,7 +139,7 @@ func (a *RelayEmployeeGRPCAPI) CreateEmployee(ctx context.Context, req *relayv1.
 	if err != nil {
 		return nil, err
 	}
-	employee, err := a.Service.CreateEmployee(ctx, principal.AccountKey, service.CreateEmployeeRequest{Name: req.GetName()})
+	employee, err := a.Service.CreateEmployee(ctx, principal.AccountKey, principal.TenantID, service.CreateEmployeeRequest{Name: req.GetName()})
 	if err != nil {
 		return nil, grpcapi.Error(err)
 	}

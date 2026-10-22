@@ -14,8 +14,8 @@ import (
 func Modules() []commonmodule.ModuleInfo {
 	return []commonmodule.ModuleInfo{
 		commonmodule.NewModule("system", system.NewSystemModule()),
-		commonmodule.NewModule("ai", &ai.Module{}),
 		commonmodule.NewModule("iam", &iam.Module{}),
+		commonmodule.NewModule("ai", &ai.Module{}),
 		commonmodule.NewModule("gateway", &gateway.Module{}),
 		commonmodule.NewModule("relay", &relay.Module{}),
 		commonmodule.NewModule("channel", &channel.Module{}),
