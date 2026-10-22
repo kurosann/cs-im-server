@@ -194,6 +194,31 @@ func TestCleanMiniMaxContentSeparatesReasoning(t *testing.T) {
 	}
 }
 
+func TestNormalizeMiniMaxResponseDropsReasoningFields(t *testing.T) {
+	input := "{\"choices\":[{\"message\":{\"content\":\"<think>private tags</think>answer\",\"reasoning_content\":\"private field\"}}]}"
+	output := string(NormalizeMiniMaxResponse([]byte(input)))
+	if !strings.Contains(output, `"content":"answer"`) || strings.Contains(output, "private") || strings.Contains(output, "reasoning_content") {
+		t.Fatalf("MiniMax reasoning was not removed: %s", output)
+	}
+}
+
+func TestNormalizeMiniMaxAnthropicResponseDropsThinkingBlocks(t *testing.T) {
+	input := "{\"content\":[{\"type\":\"thinking\",\"thinking\":\"private block\"},{\"type\":\"redacted_thinking\",\"data\":\"private signature\"},{\"type\":\"text\",\"text\":\"<analysis>private tags</analysis>answer\"}]}"
+	response := &http.Response{Body: io.NopCloser(strings.NewReader(input))}
+	normalized, err := normalizeMiniMaxAnthropicResponse(response, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := ReadBody(normalized, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := string(body)
+	if strings.Contains(output, "private") || strings.Contains(output, "thinking") || strings.Contains(output, "redacted_thinking") || !strings.Contains(output, `"text":"answer"`) {
+		t.Fatalf("MiniMax Anthropic reasoning was not removed: %s", output)
+	}
+}
+
 func TestMiniMaxSSESeparatesTagsSplitAcrossChunks(t *testing.T) {
 	input := "event: message\n"
 	input += "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"<thi\"}}]}\n\n"
@@ -250,5 +275,34 @@ func TestMiniMaxAnthropicSSEKeepsAnthropicEventNames(t *testing.T) {
 	text := string(filtered)
 	if !strings.Contains(text, "event: content_block_delta") || strings.Contains(text, "private") || !strings.Contains(text, `"text":"answer"`) {
 		t.Fatalf("Anthropic MiniMax stream was not normalized in Anthropic format: %s", text)
+	}
+}
+
+func TestMiniMaxAnthropicSSEDropsThinkingBlocks(t *testing.T) {
+	input := strings.Join([]string{
+		"event: content_block_start",
+		"data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}",
+		"",
+		"event: content_block_delta",
+		"data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"private stream block\"}}",
+		"",
+		"event: content_block_stop",
+		"data: {\"type\":\"content_block_stop\",\"index\":1}",
+		"",
+		"event: content_block_start",
+		"data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}",
+		"",
+		"event: content_block_delta",
+		"data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"answer\"}}",
+		"",
+	}, "\n")
+	body := newMiniMaxAnthropicSSEBody(io.NopCloser(strings.NewReader(input)))
+	filtered, err := io.ReadAll(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(filtered)
+	if strings.Contains(text, "private stream block") || strings.Contains(text, "thinking_delta") || !strings.Contains(text, `"text":"answer"`) {
+		t.Fatalf("Anthropic thinking block was not removed: %s", text)
 	}
 }

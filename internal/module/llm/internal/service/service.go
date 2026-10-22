@@ -515,20 +515,19 @@ func NormalizeMiniMaxResponse(body []byte) []byte {
 	for _, raw := range choices {
 		choice, _ := raw.(map[string]any)
 		message, _ := choice["message"].(map[string]any)
-		content, _ := message["content"].(string)
-		if message == nil || content == "" {
+		if message == nil {
 			continue
 		}
-		cleaned, reasoning := CleanMiniMaxContent(content)
-		if cleaned != content {
-			message["content"] = cleaned
-			changed = true
-		}
-		if reasoning != "" {
-			if _, exists := message["reasoning_content"]; exists {
-				delete(message, "reasoning_content")
+		if content, ok := message["content"].(string); ok && content != "" {
+			cleaned, _ := CleanMiniMaxContent(content)
+			if cleaned != content {
+				message["content"] = cleaned
 				changed = true
 			}
+		}
+		if _, exists := message["reasoning_content"]; exists {
+			delete(message, "reasoning_content")
+			changed = true
 		}
 	}
 	if !changed {
@@ -583,17 +582,29 @@ func normalizeMiniMaxAnthropicResponse(response *http.Response, limit int64) (*h
 	}
 	blocks, _ := payload["content"].([]any)
 	changed := false
+	visibleBlocks := make([]any, 0, len(blocks))
 	for _, raw := range blocks {
 		block, _ := raw.(map[string]any)
-		if block == nil || block["type"] != "text" {
+		if block == nil {
+			visibleBlocks = append(visibleBlocks, raw)
 			continue
 		}
-		text, _ := block["text"].(string)
-		cleaned, _ := CleanMiniMaxContent(text)
-		if cleaned != text {
-			block["text"] = cleaned
+		if block["type"] == "thinking" || block["type"] == "redacted_thinking" {
 			changed = true
+			continue
 		}
+		if block["type"] == "text" {
+			text, _ := block["text"].(string)
+			cleaned, _ := CleanMiniMaxContent(text)
+			if cleaned != text {
+				block["text"] = cleaned
+				changed = true
+			}
+		}
+		visibleBlocks = append(visibleBlocks, raw)
+	}
+	if changed {
+		payload["content"] = visibleBlocks
 	}
 	if !changed {
 		return responseWithBody(response, body), nil

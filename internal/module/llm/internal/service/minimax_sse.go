@@ -3,6 +3,7 @@ package service
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"regexp"
 	"sort"
@@ -172,6 +173,13 @@ func (b *miniMaxSSEBody) transformLine(line string) []byte {
 	for _, rawChoice := range choices {
 		choice, _ := rawChoice.(map[string]any)
 		delta, _ := choice["delta"].(map[string]any)
+		if delta == nil {
+			continue
+		}
+		if _, exists := delta["reasoning_content"]; exists {
+			delete(delta, "reasoning_content")
+			modified = true
+		}
 		fragment, ok := delta["content"].(string)
 		if !ok || fragment == "" {
 			text, exists := delta["text"].(string)
@@ -224,6 +232,7 @@ type miniMaxAnthropicSSEBody struct {
 	filter         reasoningStreamFilter
 	eventLines     []string
 	lastBlockIndex any
+	hiddenBlocks   map[string]struct{}
 	pending        []byte
 	eof            bool
 }
@@ -287,11 +296,34 @@ func (b *miniMaxAnthropicSSEBody) transformEvent(lines []string) []byte {
 	if json.Unmarshal([]byte(strings.TrimSpace(dataLines[0])), &payload) != nil {
 		return []byte(strings.Join(lines, ""))
 	}
+	indexKey := fmt.Sprint(payload["index"])
+	if payload["type"] == "content_block_start" {
+		block, _ := payload["content_block"].(map[string]any)
+		if block != nil && (block["type"] == "thinking" || block["type"] == "redacted_thinking") {
+			if b.hiddenBlocks == nil {
+				b.hiddenBlocks = make(map[string]struct{})
+			}
+			b.hiddenBlocks[indexKey] = struct{}{}
+			return nil
+		}
+	}
+	if _, hidden := b.hiddenBlocks[indexKey]; hidden {
+		if payload["type"] == "content_block_stop" {
+			delete(b.hiddenBlocks, indexKey)
+		}
+		return nil
+	}
 	if payload["type"] != "content_block_delta" {
 		return []byte(strings.Join(lines, ""))
 	}
 	delta, _ := payload["delta"].(map[string]any)
-	if delta == nil || delta["type"] != "text_delta" {
+	if delta == nil {
+		return []byte(strings.Join(lines, ""))
+	}
+	if delta["type"] == "thinking_delta" || delta["type"] == "signature_delta" {
+		return nil
+	}
+	if delta["type"] != "text_delta" {
 		return []byte(strings.Join(lines, ""))
 	}
 	fragment, _ := delta["text"].(string)
