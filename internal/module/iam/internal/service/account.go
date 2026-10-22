@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -19,38 +18,36 @@ import (
 )
 
 const (
-	ScopeAll            = "*"
-	ScopeGatewayAdmin   = "gateway:admin"
-	ScopeIAMTokenManage = "iam:token:manage"
-	ScopeIAMUserManage  = "iam:user:manage"
-	ScopeIAMRoleManage  = "iam:role:manage"
-	ScopeChannelAccess  = "channel:access"
-	ScopeRelayAccess    = "relay:access"
+	ScopeAll                = "*"
+	ScopeGatewayAdmin       = "gateway:admin"
+	ScopeIAMTokenManage     = "iam:token:manage"
+	ScopeIAMUserManage      = "iam:user:manage"
+	ScopeIAMRoleManage      = "iam:role:manage"
+	ScopeChannelAccess      = "channel:access"
+	ScopeRelayAccess        = "relay:access"
+	ScopeConversationRead   = "conversation:read"
+	ScopeConversationManage = "conversation:manage"
+	ScopeMessageSendAgent   = "message:send:agent"
+	ScopeAuditRead          = "audit:read"
 )
 
 type AccountService struct {
-	accessor          dataaccess.DataAccessor[*model.AccountToken]
-	credentials       dataaccess.DataAccessor[*model.ChannelCredential]
-	users             dataaccess.DataAccessor[*model.User]
-	roles             dataaccess.DataAccessor[*model.Role]
-	audit             *AuditService
-	bootstrapToken    string
-	relayToken        string
-	bootstrapTenantID string
+	accessor    dataaccess.DataAccessor[*model.AccountToken]
+	credentials dataaccess.DataAccessor[*model.ChannelCredential]
+	users       dataaccess.DataAccessor[*model.User]
+	roles       dataaccess.DataAccessor[*model.Role]
+	audit       *AuditService
 }
 
-func NewAccountService(bootstrapToken, tenantID string, relayToken ...string) *AccountService {
-	relayTokenValue := ""
-	if len(relayToken) > 0 {
-		relayTokenValue = relayToken[0]
-	}
+func NewAccountService() *AccountService {
+	return NewAccountServiceWithAudit(NewAuditService())
+}
+
+func NewAccountServiceWithAudit(audit *AuditService) *AccountService {
 	return &AccountService{
-		accessor:          dataaccess.DataAccessor[*model.AccountToken]{},
-		roles:             dataaccess.DataAccessor[*model.Role]{},
-		audit:             NewAuditService(),
-		bootstrapToken:    bootstrapToken,
-		relayToken:        relayTokenValue,
-		bootstrapTenantID: tenantID,
+		accessor: dataaccess.DataAccessor[*model.AccountToken]{},
+		roles:    dataaccess.DataAccessor[*model.Role]{},
+		audit:    audit,
 	}
 }
 
@@ -129,13 +126,7 @@ func (s *AccountService) Authenticate(_ context.Context, token string) (iamprinc
 			TokenKey:   item.TokenKey,
 		}, nil
 	}
-	if s.relayToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.relayToken)) == 1 {
-		return iamprincipal.Principal{AccountKey: "relay-account", Name: "转发渠道", TenantID: s.bootstrapTenantID, Kind: iamprincipal.KindRelay, Scopes: []string{ScopeAll}}, nil
-	}
-	if s.bootstrapToken == "" || subtle.ConstantTimeCompare([]byte(token), []byte(s.bootstrapToken)) != 1 {
-		return iamprincipal.Principal{}, unauthorized("invalid account token")
-	}
-	return iamprincipal.Principal{AccountKey: "dev-account", Name: "开发账号", TenantID: s.bootstrapTenantID, Kind: iamprincipal.KindBusiness, Scopes: []string{ScopeAll}}, nil
+	return iamprincipal.Principal{}, unauthorized("invalid account token")
 }
 
 func (s *AccountService) authenticateStaff(ctx context.Context, item *model.AccountToken) (iamprincipal.Principal, error) {
@@ -163,13 +154,20 @@ func (s *AccountService) authenticateStaff(ctx context.Context, item *model.Acco
 	}, nil
 }
 
+func (s *AccountService) RoleScopes(ctx context.Context, tenantID, role string) ([]string, error) {
+	return s.roleScopes(ctx, tenantID, role)
+}
+
 func (s *AccountService) roleScopes(ctx context.Context, tenantID, role string) ([]string, error) {
 	if role == "owner" {
-		return roleScopes(role), nil
+		return builtinRoleScopes(role), nil
 	}
 	item, err := s.roles.First(ctx, dataaccess.Eq("tenant_id", tenantID), dataaccess.Eq("role_key", role))
 	if errors.Is(err, dataaccess.ErrDataNotFound) {
-		return roleScopes(role), nil
+		if _, found := builtinRole(role); found {
+			return builtinRoleScopes(role), nil
+		}
+		return nil, nil
 	}
 	if err != nil {
 		return nil, err

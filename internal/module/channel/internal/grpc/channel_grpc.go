@@ -99,6 +99,17 @@ func (a *ChannelGatewayGRPCAPI) EnsureConversation(ctx context.Context, req *gat
 	return conversationFromService(conversation, created), nil
 }
 
+func (a *ChannelGatewayGRPCAPI) GetConversation(ctx context.Context, req *gatewayv1.GetConversationRequest) (*gatewayv1.ConversationResponse, error) {
+	if err := a.authorize(ctx, req.AppId); err != nil {
+		return nil, err
+	}
+	conversation, err := a.Conversations.Get(ctx, req.ConversationId)
+	if err != nil {
+		return nil, grpcapi.Error(err)
+	}
+	return conversationFromService(conversation, false), nil
+}
+
 func (a *ChannelGatewayGRPCAPI) messageFromService(item gatewaypkg.Message) *gatewayv1.Message {
 	source := (*gatewayv1.MessageSource)(nil)
 	if item.SourceAppKey != "" || item.SourceExternalID != "" || item.SourceSentAt != nil {
@@ -187,6 +198,7 @@ func (a *ChannelGatewayGRPCAPI) StreamMessages(req *gatewayv1.StreamMessagesRequ
 		return grpcapi.Error(err)
 	}
 	defer closeFn()
+	a.Apps.MarkConnected(req.AppId)
 	for {
 		select {
 		case <-stream.Context().Done():

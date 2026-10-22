@@ -25,14 +25,16 @@ log:
   hide_console: false
   console_encode: true
 
-access:
-  account_token: "dev-access-token"
-  relay_token: "dev-relay-token"
-  tenant_id: "dev-tenant"
-
 http:
   host: "127.0.0.1"
   port: 8080
 
 database:
   dsn: "tlgs:tlgadmin123@tcp(119.91.220.213:7036)/cs_im?charset=utf8mb4&parseTime=true&loc=Local"
+
+# MiniMax-M3 via the OpenAI-compatible chat completions API.
+# The API key is read from CS_IM_AI_API_KEY, or from a gitignored .env in this directory.
+ai:
+  endpoint: "https://api.minimaxi.com/v1"
+  model: "MiniMax-M3"
+  timeout_seconds: 60

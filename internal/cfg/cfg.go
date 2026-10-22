@@ -28,9 +28,9 @@ const ServiceRoleName = role.ServiceRole(consts.ServiceName)
 type ConfigRoot struct {
 	Server   ServerConfig       `yaml:"server"`
 	Log      logger.LogConfig   `yaml:"log"`
-	Access   AccessConfig       `yaml:"access"`
 	HTTP     HTTPListenerConfig `yaml:"http"`
 	Database DatabaseConfig     `yaml:"database"`
+	AI       AIModelConfig      `yaml:"ai"`
 }
 
 type ServerConfig struct {
@@ -57,12 +57,6 @@ type PushGatewayConfig struct {
 	PushGap  int    `yaml:"push_gap"`
 }
 
-type AccessConfig struct {
-	AccountToken string `yaml:"account_token"`
-	RelayToken   string `yaml:"relay_token"`
-	TenantID     string `yaml:"tenant_id"`
-}
-
 type HTTPListenerConfig struct {
 	Host string `yaml:"host"`
 	Port int    `yaml:"port"`
@@ -70,6 +64,16 @@ type HTTPListenerConfig struct {
 
 type DatabaseConfig struct {
 	DSN string `yaml:"dsn"`
+}
+
+// AIModelConfig is the OpenAI-compatible MiniMax chat endpoint.
+// APIKey comes from CS_IM_AI_API_KEY, or from a gitignored .env when that variable is empty.
+// It is never read from YAML.
+type AIModelConfig struct {
+	Endpoint       string `yaml:"endpoint"`
+	Model          string `yaml:"model"`
+	TimeoutSeconds int    `yaml:"timeout_seconds"`
+	APIKey         string `yaml:"-"`
 }
 
 var appConfig *ConfigRoot
@@ -133,11 +137,6 @@ func defaultConfig() *ConfigRoot {
 			MaxAge:        7,
 			ConsoleEncode: true,
 		},
-		Access: AccessConfig{
-			AccountToken: "dev-access-token",
-			RelayToken:   "dev-relay-token",
-			TenantID:     "dev-tenant",
-		},
 		HTTP: HTTPListenerConfig{
 			Host: consts.DefaultServerHost,
 			Port: consts.DefaultServerPort,
@@ -158,14 +157,14 @@ func applyDefaults(cfg *ConfigRoot) {
 	if cfg.HTTP.Port == 0 {
 		cfg.HTTP.Port = cfg.Server.Port
 	}
-	if cfg.Access.AccountToken == "" {
-		cfg.Access.AccountToken = "dev-access-token"
+	if cfg.AI.Endpoint == "" {
+		cfg.AI.Endpoint = "https://api.minimaxi.com/v1"
 	}
-	if cfg.Access.RelayToken == "" {
-		cfg.Access.RelayToken = "dev-relay-token"
+	if cfg.AI.Model == "" {
+		cfg.AI.Model = "MiniMax-M3"
 	}
-	if cfg.Access.TenantID == "" {
-		cfg.Access.TenantID = "dev-tenant"
+	if cfg.AI.TimeoutSeconds <= 0 {
+		cfg.AI.TimeoutSeconds = 60
 	}
 }
 
@@ -193,18 +192,43 @@ func injectEnv() {
 			appConfig.Server.Port = port
 		}
 	}
-	if value := os.Getenv("CS_IM_ACCOUNT_TOKEN"); value != "" {
-		appConfig.Access.AccountToken = value
-	}
-	if value := os.Getenv("CS_IM_RELAY_TOKEN"); value != "" {
-		appConfig.Access.RelayToken = value
-	}
-	if value := os.Getenv("CS_IM_TENANT_ID"); value != "" {
-		appConfig.Access.TenantID = value
-	}
 	if value := os.Getenv("CS_IM_DB_DSN"); value != "" {
 		appConfig.Database.DSN = value
 	}
+	appConfig.AI.APIKey = aiAPIKey()
+}
+
+func aiAPIKey() string {
+	if value := strings.TrimSpace(os.Getenv("CS_IM_AI_API_KEY")); value != "" {
+		return value
+	}
+	for _, path := range []string{".env", "config/.env"} {
+		if value := dotenvValue(path, "CS_IM_AI_API_KEY"); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func dotenvValue(path, key string) string {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	prefix := key + "="
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		value := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		return strings.TrimSpace(strings.Trim(value, `"'`))
+	}
+	return ""
 }
 
 func GetServerConfig() serverconfig.Config {

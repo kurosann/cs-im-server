@@ -13,11 +13,12 @@ import (
 )
 
 type AuthAPI struct {
-	Staff *service.StaffService
+	Accounts *service.AccountService
+	Staff    *service.StaffService
 }
 
-func NewAuthAPI(staff *service.StaffService) *AuthAPI {
-	return &AuthAPI{Staff: staff}
+func NewAuthAPI(accounts *service.AccountService, staff *service.StaffService) *AuthAPI {
+	return &AuthAPI{Accounts: accounts, Staff: staff}
 }
 
 type RegisterRequest struct {
@@ -32,9 +33,9 @@ func (a *AuthAPI) Routes() []commonmodule.HttpHandlerRegInfo {
 	return []commonmodule.HttpHandlerRegInfo{
 		auth.Post("/login", a.Login),
 		auth.Post("/register", a.Register),
-		auth.Post("/password", a.ChangePassword, commonmodule.WithMiddlewares(iamhttp.AccountTokenMiddleware(), iamhttp.RequirePrincipalKind(pkg.PrincipalKindHuman))),
-		auth.Post("/logout", a.Logout, commonmodule.WithMiddlewares(iamhttp.AccountTokenMiddleware(), iamhttp.RequirePrincipalKind(pkg.PrincipalKindHuman))),
-		auth.Get("/me", a.Me, commonmodule.WithMiddlewares(iamhttp.AccountTokenMiddleware(), iamhttp.RequirePrincipalKind(pkg.PrincipalKindHuman))),
+		auth.Post("/password", a.ChangePassword, commonmodule.WithMiddlewares(iamhttp.AccountTokenMiddleware(a.Accounts), iamhttp.RequirePrincipalKind(pkg.PrincipalKindHuman))),
+		auth.Post("/logout", a.Logout, commonmodule.WithMiddlewares(iamhttp.AccountTokenMiddleware(a.Accounts), iamhttp.RequirePrincipalKind(pkg.PrincipalKindHuman))),
+		auth.Get("/me", a.Me, commonmodule.WithMiddlewares(iamhttp.AccountTokenMiddleware(a.Accounts), iamhttp.RequirePrincipalKind(pkg.PrincipalKindHuman))),
 	}
 }
 

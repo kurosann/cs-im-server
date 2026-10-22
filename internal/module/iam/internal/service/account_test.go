@@ -25,7 +25,7 @@ func setupAccountService(t *testing.T) *iamservice.AccountService {
 	if err := db.AutoMigrate(&iammodel.AccountToken{}, &iammodel.ChannelCredential{}); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
-	return iamservice.NewAccountService("bootstrap-token", "tenant_1", "relay-token")
+	return iamservice.NewAccountService()
 }
 
 func bootstrapPrincipal() iamprincipal.Principal {

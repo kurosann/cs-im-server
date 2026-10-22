@@ -19,7 +19,7 @@ type realtimePublisherStub struct{}
 
 func (realtimePublisherStub) Publish(string, string, any) {}
 
-func setupRelayGRPC(t *testing.T) *RelayChannelGRPCAPI {
+func setupRelayGRPC(t *testing.T) (*RelayChannelGRPCAPI, string) {
 	t.Helper()
 	db, err := sqlitedb.NewSqliteDB(sqlitedb.Config{DSN: ":memory:"})
 	if err != nil {
@@ -30,10 +30,26 @@ func setupRelayGRPC(t *testing.T) *RelayChannelGRPCAPI {
 	if err := db.AutoMigrate(&iampkg.AccountToken{}, &iampkg.ChannelCredential{}, &relayservice.Channel{}); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
+	accounts := iampkg.NewAccountService()
+	manager := iampkg.Principal{
+		AccountKey: "staff",
+		Name:       "Relay Manager",
+		TenantID:   "tenant_1",
+		Kind:       iampkg.PrincipalKindHuman,
+		Scopes:     []string{iampkg.ScopeAll},
+	}
+	issued, err := accounts.Issue(context.Background(), manager, iampkg.IssueAccountTokenRequest{
+		AccountKey: "relay-manager",
+		Name:       "Relay Manager Token",
+		Kind:       iampkg.PrincipalKindRelay,
+	})
+	if err != nil {
+		t.Fatalf("issue relay token: %v", err)
+	}
 	return NewRelayChannelGRPCAPI(
-		iampkg.NewAccountService("bootstrap-token", "tenant_1"),
+		accounts,
 		relayservice.NewRelayService(realtimePublisherStub{}),
-	)
+	), issued.Secret
 }
 
 func relayContext(token string) context.Context {
@@ -43,8 +59,8 @@ func relayContext(token string) context.Context {
 }
 
 func TestRelayChannelGRPCManagement(t *testing.T) {
-	api := setupRelayGRPC(t)
-	ctx := relayContext("bootstrap-token")
+	api, token := setupRelayGRPC(t)
+	ctx := relayContext(token)
 
 	config, err := structpb.NewStruct(map[string]any{"queue": "cs-im"})
 	if err != nil {
@@ -76,7 +92,7 @@ func TestRelayChannelGRPCManagement(t *testing.T) {
 }
 
 func TestRelayChannelGRPCRequiresToken(t *testing.T) {
-	api := setupRelayGRPC(t)
+	api, _ := setupRelayGRPC(t)
 	_, err := api.ListChannels(context.Background(), &relayv1.ListChannelsRequest{})
 	if status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("ListChannels() error = %v, want Unauthenticated", err)

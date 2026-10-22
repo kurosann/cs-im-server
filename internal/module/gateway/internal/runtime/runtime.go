@@ -28,6 +28,8 @@ type MessageIngress interface {
 
 type MessageEgress interface {
 	CreateRelayMessage(ctx context.Context, relayID string, req gatewaydto.CreateMessageRequest) (model.Message, error)
+	CreateAIReply(ctx context.Context, conversationID, employeeID, text string) (model.Message, error)
+	RecentMessages(ctx context.Context, conversationID string, limit int) ([]model.Message, error)
 	RelayHistory(ctx context.Context, conversationID string, filter gatewaydto.MessageHistoryFilter) (gatewaydto.MessageHistoryPage, error)
 	RelayEventAllowed(event service.RealtimeEvent) bool
 }
@@ -48,6 +50,7 @@ var (
 	messageEgress       MessageEgress
 	realtimeSubscriber  RealtimeSubscriber
 	realtimePublisher   RealtimePublisher
+	customerObserver    func(model.Message)
 )
 
 func SetCapabilities(
@@ -108,6 +111,16 @@ func RealtimeSubscriberCapability() RealtimeSubscriber {
 		panic("gateway realtime subscriber is not initialized")
 	}
 	return realtimeSubscriber
+}
+
+func SetCustomerMessageObserver(fn func(model.Message)) {
+	serviceMu.Lock()
+	customerObserver = fn
+	ingress := messageIngress
+	serviceMu.Unlock()
+	if setter, ok := ingress.(interface{ SetCustomerObserver(func(model.Message)) }); ok && fn != nil {
+		setter.SetCustomerObserver(fn)
+	}
 }
 
 func RealtimePublisherCapability() RealtimePublisher {

@@ -47,6 +47,7 @@ type EmployeeView struct {
 	Prompt         string           `json:"prompt"`
 	History        int              `json:"history"`
 	AutoReply      bool             `json:"autoReply"`
+	IsDefault      bool             `json:"isDefault"`
 	SelectedDocIDs []string         `json:"selectedDocIds"`
 	Tools          []string         `json:"tools"`
 	Channels       []ChannelBinding `json:"channels"`
@@ -64,6 +65,7 @@ type UpdateEmployeeRequest struct {
 	Prompt         string           `json:"prompt"`
 	History        int              `json:"history"`
 	AutoReply      bool             `json:"autoReply"`
+	IsDefault      bool             `json:"isDefault"`
 	SelectedDocIDs []string         `json:"selectedDocIds"`
 	Tools          []string         `json:"tools"`
 	Channels       []ChannelBinding `json:"channels"`
@@ -102,7 +104,7 @@ func (s *RelayService) ListEmployeeChannels(ctx context.Context, tenantID string
 	return s.channelOptions(ctx, strings.TrimSpace(tenantID))
 }
 
-func (s *RelayService) CreateEmployee(ctx context.Context, accountKey string, req CreateEmployeeRequest) (EmployeeView, error) {
+func (s *RelayService) CreateEmployee(ctx context.Context, accountKey, tenantID string, req CreateEmployeeRequest) (EmployeeView, error) {
 	accountKey = strings.TrimSpace(accountKey)
 	if accountKey == "" {
 		return EmployeeView{}, unauthorized("请先登录")
@@ -117,6 +119,7 @@ func (s *RelayService) CreateEmployee(ctx context.Context, accountKey string, re
 	item := &AIEmployee{
 		EmployeeKey:         "emp_" + idutil.GenShortId(),
 		AccountKey:          accountKey,
+		TenantID:            strings.TrimSpace(tenantID),
 		Name:                name,
 		NameKey:             nameKey,
 		Mode:                employeeModeBasic,
@@ -180,10 +183,21 @@ func (s *RelayService) UpdateEmployee(ctx context.Context, accountKey, tenantID,
 		if err := s.ensureEmployeeNameAvailable(txCtx, accountKey, nameKey, employeeID); err != nil {
 			return err
 		}
-		if err := s.ensureBindingsAvailable(txCtx, accountKey, employeeID, desired); err != nil {
+		if strings.TrimSpace(item.TenantID) == "" {
+			item.TenantID = strings.TrimSpace(tenantID)
+		}
+		if tenantID == "" {
+			tenantID = item.TenantID
+		}
+		if err := s.ensureBindingsAvailable(txCtx, accountKey, tenantID, employeeID, desired); err != nil {
 			return err
 		}
-		if err := s.replaceBindings(txCtx, accountKey, employeeID, desired); err != nil {
+		if req.IsDefault {
+			if err := s.clearDefaultEmployees(txCtx, tenantID, employeeID); err != nil {
+				return err
+			}
+		}
+		if err := s.replaceBindings(txCtx, accountKey, tenantID, employeeID, desired); err != nil {
 			return err
 		}
 		item.Name = name
@@ -193,6 +207,7 @@ func (s *RelayService) UpdateEmployee(ctx context.Context, accountKey, tenantID,
 		item.Prompt = req.Prompt
 		item.HistoryMessageCount = req.History
 		item.AutoReplyEnabled = req.AutoReply
+		item.IsDefault = req.IsDefault
 		item.Status = status
 		item.SelectedDocIDs = docs
 		item.Tools = tools
@@ -223,7 +238,7 @@ func (s *RelayService) DeleteEmployee(ctx context.Context, accountKey, employeeI
 		if err != nil {
 			return err
 		}
-		if err := s.replaceBindings(txCtx, accountKey, employeeID, nil); err != nil {
+		if err := s.replaceBindings(txCtx, accountKey, item.TenantID, employeeID, nil); err != nil {
 			return err
 		}
 		now := time.Now()
@@ -268,17 +283,19 @@ func (s *RelayService) ensureEmployeeNameAvailable(ctx context.Context, accountK
 	return nil
 }
 
-func (s *RelayService) ensureBindingsAvailable(ctx context.Context, accountKey, employeeID string, desired []ChannelBinding) error {
+func (s *RelayService) ensureBindingsAvailable(ctx context.Context, accountKey, tenantID, employeeID string, desired []ChannelBinding) error {
 	for _, binding := range desired {
-		rows, err := s.bindings.List(ctx,
-			dataaccess.Eq("account_key", accountKey),
-			dataaccess.Eq("platform", binding.Platform),
-		)
+		rows, err := s.bindings.List(ctx, dataaccess.Eq("platform", binding.Platform))
 		if err != nil {
 			return err
 		}
 		for _, current := range rows {
-			if current.EmployeeKey != employeeID {
+			if current.EmployeeKey == employeeID {
+				continue
+			}
+			sameAccount := current.AccountKey == accountKey
+			sameTenant := tenantID != "" && current.TenantID == tenantID
+			if sameAccount || sameTenant {
 				return conflict("渠道 %s 已绑定到其他 AI 客服", binding.displayName())
 			}
 		}
@@ -286,7 +303,7 @@ func (s *RelayService) ensureBindingsAvailable(ctx context.Context, accountKey, 
 	return nil
 }
 
-func (s *RelayService) replaceBindings(ctx context.Context, accountKey, employeeID string, desired []ChannelBinding) error {
+func (s *RelayService) replaceBindings(ctx context.Context, accountKey, tenantID, employeeID string, desired []ChannelBinding) error {
 	current, err := s.bindings.List(ctx,
 		dataaccess.Eq("account_key", accountKey),
 		dataaccess.Eq("employee_key", employeeID),
@@ -302,6 +319,7 @@ func (s *RelayService) replaceBindings(ctx context.Context, accountKey, employee
 	for _, binding := range desired {
 		row := &AIEmployeeBinding{
 			AccountKey:      accountKey,
+			TenantID:        tenantID,
 			EmployeeKey:     employeeID,
 			Platform:        binding.Platform,
 			BoundAccountKey: channelBindingAccountKey,
@@ -398,6 +416,7 @@ func employeeView(item *AIEmployee, bindings []ChannelBinding) EmployeeView {
 		Prompt:         item.Prompt,
 		History:        item.HistoryMessageCount,
 		AutoReply:      item.AutoReplyEnabled,
+		IsDefault:      item.IsDefault,
 		SelectedDocIDs: stringList(item.SelectedDocIDs),
 		Tools:          stringList(item.Tools),
 		Channels:       bindings,

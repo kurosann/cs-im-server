@@ -17,6 +17,7 @@ type AIEmployee struct {
 	base.BaseModel
 	EmployeeKey         string     `gorm:"column:employee_key;size:64;uniqueIndex" json:"employeeId"`
 	AccountKey          string     `gorm:"column:account_key;size:64;not null;index;uniqueIndex:uidx_ai_employee_account_name" json:"-"`
+	TenantID            string     `gorm:"column:tenant_id;size:64;index" json:"-"`
 	Name                string     `gorm:"column:name;size:50;not null" json:"name"`
 	NameKey             string     `gorm:"column:name_key;size:100;not null;uniqueIndex:uidx_ai_employee_account_name" json:"-"`
 	Persona             string     `gorm:"column:persona;size:255" json:"persona"`
@@ -24,6 +25,7 @@ type AIEmployee struct {
 	Prompt              string     `gorm:"column:prompt;type:text" json:"prompt"`
 	HistoryMessageCount int        `gorm:"column:history_message_count;not null;default:10" json:"history"`
 	AutoReplyEnabled    bool       `gorm:"column:auto_reply_enabled;not null;default:true" json:"autoReply"`
+	IsDefault           bool       `gorm:"column:is_default;not null;default:false" json:"isDefault"`
 	Status              string     `gorm:"column:status;size:32;not null;default:paused" json:"status"`
 	SelectedDocIDsJSON  string     `gorm:"column:selected_doc_ids;type:text" json:"-"`
 	SelectedDocIDs      []string   `gorm:"-" json:"selectedDocIds"`
@@ -57,6 +59,7 @@ var _ damodel.Table = (*AIEmployeeBinding)(nil)
 type AIEmployeeBinding struct {
 	base.BaseModel
 	AccountKey      string `gorm:"column:account_key;size:64;not null;uniqueIndex:uidx_ai_employee_binding" json:"-"`
+	TenantID        string `gorm:"column:tenant_id;size:64;index" json:"-"`
 	EmployeeKey     string `gorm:"column:employee_key;size:64;not null;index" json:"employeeId"`
 	Platform        string `gorm:"column:platform;size:64;not null;uniqueIndex:uidx_ai_employee_binding" json:"platform"`
 	BoundAccountKey string `gorm:"column:account_key_binding;size:255;not null;uniqueIndex:uidx_ai_employee_binding" json:"accountKey"`

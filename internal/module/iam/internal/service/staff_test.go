@@ -28,20 +28,28 @@ func setupStaffService(t *testing.T) *iamservice.StaffService {
 	if err := db.AutoMigrate(&iammodel.User{}); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
-	accountService := iamservice.NewAccountService("bootstrap-token", "tenant_1", "relay-token")
-	return iamservice.NewStaffService(accountService, "admin@cs-im.local", "admin12345", "tenant_1")
+	accountService := iamservice.NewAccountService()
+	return iamservice.NewStaffService(accountService)
+}
+
+func registerOwner(t *testing.T, service *iamservice.StaffService) iamdto.LoginResult {
+	t.Helper()
+	login, err := service.Register(context.Background(), iamdto.RegisterRequest{
+		DisplayName: "租户主账号",
+		Email:       "owner@example.com",
+		Password:    "password123",
+		TenantName:  "测试租户",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	return login
 }
 
 func TestStaffLoginAndLogout(t *testing.T) {
 	service := setupStaffService(t)
-	login, err := service.Login(context.Background(), iamdto.LoginRequest{
-		Identifier: "admin@cs-im.local",
-		Password:   "admin12345",
-	}, iamdto.SessionContext{Device: "Web 工作台", IP: "192.0.2.1"})
-	if err != nil {
-		t.Fatalf("Login() error = %v", err)
-	}
-	if login.Token.Token == "" || login.User.Role != "admin" {
+	login := registerOwner(t, service)
+	if login.Token.Token == "" || login.User.Role != "owner" {
 		t.Fatalf("Login() = %+v", login)
 	}
 	principal, err := service.Accounts().Authenticate(context.Background(), login.Token.Token)
@@ -58,13 +66,7 @@ func TestStaffLoginAndLogout(t *testing.T) {
 
 func TestStaffPermissionsRefreshOnAuthenticate(t *testing.T) {
 	service := setupStaffService(t)
-	login, err := service.Login(context.Background(), iamdto.LoginRequest{
-		Identifier: "admin@cs-im.local",
-		Password:   "admin12345",
-	}, iamdto.SessionContext{})
-	if err != nil {
-		t.Fatalf("Login() error = %v", err)
-	}
+	login := registerOwner(t, service)
 	principal, err := service.Accounts().Authenticate(context.Background(), login.Token.Token)
 	if err != nil || !principal.HasScope(iamservice.ScopeIAMTokenManage) {
 		t.Fatalf("Authenticate() = %+v, error = %v", principal, err)
@@ -84,21 +86,15 @@ func TestStaffPermissionsRefreshOnAuthenticate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Authenticate() after role update error = %v", err)
 	}
-	if refreshed.HasScope(iamservice.ScopeIAMTokenManage) || !refreshed.HasScope("audit:read") {
+	if refreshed.HasScope(iamservice.ScopeIAMTokenManage) || !refreshed.HasScope(iamservice.ScopeAuditRead) {
 		t.Fatalf("Authenticate() did not refresh permissions: %+v", refreshed)
 	}
 }
 
 func TestStaffManagementUpdatesPermissionsImmediately(t *testing.T) {
 	service := setupStaffService(t)
-	admin, err := service.Login(context.Background(), iamdto.LoginRequest{
-		Identifier: "admin@cs-im.local",
-		Password:   "admin12345",
-	}, iamdto.SessionContext{})
-	if err != nil {
-		t.Fatalf("Login() error = %v", err)
-	}
-	principal, err := service.Accounts().Authenticate(context.Background(), admin.Token.Token)
+	owner := registerOwner(t, service)
+	principal, err := service.Accounts().Authenticate(context.Background(), owner.Token.Token)
 	if err != nil {
 		t.Fatalf("Authenticate() error = %v", err)
 	}
@@ -122,20 +118,14 @@ func TestStaffManagementUpdatesPermissionsImmediately(t *testing.T) {
 	if _, err := service.SetStatus(context.Background(), principal, created.User.UserKey, "disabled"); err != nil {
 		t.Fatalf("SetStatus() error = %v", err)
 	}
-	if _, err := service.Accounts().Authenticate(context.Background(), admin.Token.Token); err != nil {
-		t.Fatalf("admin authentication should still work: %v", err)
+	if _, err := service.Accounts().Authenticate(context.Background(), owner.Token.Token); err != nil {
+		t.Fatalf("owner authentication should still work: %v", err)
 	}
 }
 
 func TestStaffCannotManageSelf(t *testing.T) {
 	service := setupStaffService(t)
-	login, err := service.Login(context.Background(), iamdto.LoginRequest{
-		Identifier: "admin@cs-im.local",
-		Password:   "admin12345",
-	}, iamdto.SessionContext{})
-	if err != nil {
-		t.Fatalf("Login() error = %v", err)
-	}
+	login := registerOwner(t, service)
 	principal, err := service.Accounts().Authenticate(context.Background(), login.Token.Token)
 	if err != nil {
 		t.Fatalf("Authenticate() error = %v", err)
@@ -150,14 +140,8 @@ func TestStaffCannotManageSelf(t *testing.T) {
 
 func TestStaffListShowsSessionAndForceLogout(t *testing.T) {
 	service := setupStaffService(t)
-	admin, err := service.Login(context.Background(), iamdto.LoginRequest{
-		Identifier: "admin@cs-im.local",
-		Password:   "admin12345",
-	}, iamdto.SessionContext{Device: "Chrome", IP: "192.0.2.8"})
-	if err != nil {
-		t.Fatalf("Login() error = %v", err)
-	}
-	principal, err := service.Accounts().Authenticate(context.Background(), admin.Token.Token)
+	owner := registerOwner(t, service)
+	principal, err := service.Accounts().Authenticate(context.Background(), owner.Token.Token)
 	if err != nil {
 		t.Fatalf("Authenticate() error = %v", err)
 	}
@@ -199,13 +183,7 @@ func TestStaffListShowsSessionAndForceLogout(t *testing.T) {
 
 func TestStaffUpdateChangesProfileAndRole(t *testing.T) {
 	service := setupStaffService(t)
-	login, err := service.Login(context.Background(), iamdto.LoginRequest{
-		Identifier: "admin@cs-im.local",
-		Password:   "admin12345",
-	}, iamdto.SessionContext{})
-	if err != nil {
-		t.Fatalf("Login() error = %v", err)
-	}
+	login := registerOwner(t, service)
 	principal, err := service.Accounts().Authenticate(context.Background(), login.Token.Token)
 	if err != nil {
 		t.Fatalf("Authenticate() error = %v", err)
@@ -237,14 +215,8 @@ func TestStaffUpdateChangesProfileAndRole(t *testing.T) {
 
 func TestStaffResetPasswordRevokesSessions(t *testing.T) {
 	service := setupStaffService(t)
-	admin, err := service.Login(context.Background(), iamdto.LoginRequest{
-		Identifier: "admin@cs-im.local",
-		Password:   "admin12345",
-	}, iamdto.SessionContext{})
-	if err != nil {
-		t.Fatalf("Login() error = %v", err)
-	}
-	principal, err := service.Accounts().Authenticate(context.Background(), admin.Token.Token)
+	owner := registerOwner(t, service)
+	principal, err := service.Accounts().Authenticate(context.Background(), owner.Token.Token)
 	if err != nil {
 		t.Fatalf("Authenticate() error = %v", err)
 	}
@@ -281,28 +253,22 @@ func TestStaffResetPasswordRevokesSessions(t *testing.T) {
 
 func TestStaffChangeOwnPasswordRevokesSessions(t *testing.T) {
 	service := setupStaffService(t)
-	admin, err := service.Login(context.Background(), iamdto.LoginRequest{
-		Identifier: "admin@cs-im.local",
-		Password:   "admin12345",
-	}, iamdto.SessionContext{})
-	if err != nil {
-		t.Fatalf("Login() error = %v", err)
-	}
-	principal, err := service.Accounts().Authenticate(context.Background(), admin.Token.Token)
+	owner := registerOwner(t, service)
+	principal, err := service.Accounts().Authenticate(context.Background(), owner.Token.Token)
 	if err != nil {
 		t.Fatalf("Authenticate() error = %v", err)
 	}
 	if err := service.ChangeOwnPassword(context.Background(), principal, iamdto.ChangeOwnPasswordRequest{
-		CurrentPassword: "admin12345",
+		CurrentPassword: "password123",
 		NewPassword:     "new-password-123",
 	}); err != nil {
 		t.Fatalf("ChangeOwnPassword() error = %v", err)
 	}
-	if _, err := service.Accounts().Authenticate(context.Background(), admin.Token.Token); err == nil {
+	if _, err := service.Accounts().Authenticate(context.Background(), owner.Token.Token); err == nil {
 		t.Fatal("session remained active after password change")
 	}
 	if _, err := service.Login(context.Background(), iamdto.LoginRequest{
-		Identifier: "admin@cs-im.local",
+		Identifier: "owner@example.com",
 		Password:   "new-password-123",
 	}, iamdto.SessionContext{}); err != nil {
 		t.Fatalf("Login() after password change error = %v", err)
@@ -311,15 +277,7 @@ func TestStaffChangeOwnPasswordRevokesSessions(t *testing.T) {
 
 func TestRegisterCreatesTenantWithOwnerAccount(t *testing.T) {
 	service := setupStaffService(t)
-	login, err := service.Register(context.Background(), iamdto.RegisterRequest{
-		DisplayName: "租户主账号",
-		Email:       "owner@example.com",
-		Password:    "password123",
-		TenantName:  "测试租户",
-	})
-	if err != nil {
-		t.Fatalf("Register() error = %v", err)
-	}
+	login := registerOwner(t, service)
 	if login.User.Role != "owner" || login.User.TenantID != login.User.UserKey {
 		t.Fatalf("Register() = %+v", login.User)
 	}

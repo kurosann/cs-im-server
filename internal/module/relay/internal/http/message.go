@@ -1,7 +1,6 @@
 package http
 
 import (
-	iamhttp "cs-im-server/internal/module/iam/pkg/http"
 	"net/http"
 
 	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
@@ -21,9 +20,16 @@ func NewRelayMessageAPI(messages gatewaypkg.MessageEgress, realtime gatewaypkg.R
 	return &RelayMessageAPI{Messages: messages, Realtime: realtime}
 }
 
+func canUseRelay(principal iampkg.Principal) bool {
+	if principal.HasKind(iampkg.PrincipalKindRelay) {
+		return true
+	}
+	return principal.Kind == iampkg.PrincipalKindHuman && principal.HasScope(iampkg.ScopeRelayAccess)
+}
+
 func (a *RelayMessageAPI) relayID(ctx httpapi.Context) (string, bool) {
 	principal, ok := iampkg.PrincipalFromContext(ctx.Context())
-	if !ok || !principal.HasKind(iampkg.PrincipalKindRelay) {
+	if !ok || !canUseRelay(principal) {
 		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
 		return "", false
 	}
@@ -95,10 +101,7 @@ func (a *RelayMessageAPI) History(ctx httpapi.Context) {
 }
 
 func (a *RelayMessageAPI) Routes() commonmodule.HttpRouteGroup {
-	routes := commonmodule.NewHttpRouteGroup(
-		"/api/v1/relays",
-		commonmodule.WithGroupMiddlewares(iamhttp.RequirePrincipalKind(iampkg.PrincipalKindRelay)),
-	)
+	routes := commonmodule.NewHttpRouteGroup("/api/v1/relays")
 	routes.Post("/messages", a.Send)
 	routes.Get("/conversations/:conversationId/messages", a.History)
 	routes.Get("/realtime", a.Stream)

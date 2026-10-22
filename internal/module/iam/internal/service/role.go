@@ -16,17 +16,17 @@ import (
 )
 
 var supportedScopes = map[string]struct{}{
-	ScopeAll:              {},
-	ScopeGatewayAdmin:     {},
-	ScopeIAMTokenManage:   {},
-	ScopeIAMUserManage:    {},
-	ScopeIAMRoleManage:    {},
-	ScopeChannelAccess:    {},
-	ScopeRelayAccess:      {},
-	"conversation:read":   {},
-	"conversation:manage": {},
-	"message:send:agent":  {},
-	"audit:read":          {},
+	ScopeAll:                {},
+	ScopeGatewayAdmin:       {},
+	ScopeIAMTokenManage:     {},
+	ScopeIAMUserManage:      {},
+	ScopeIAMRoleManage:      {},
+	ScopeChannelAccess:      {},
+	ScopeRelayAccess:        {},
+	ScopeConversationRead:   {},
+	ScopeConversationManage: {},
+	ScopeMessageSendAgent:   {},
+	ScopeAuditRead:          {},
 }
 
 type RoleService struct {
@@ -241,15 +241,15 @@ func builtinRoles() []iamdto.RoleInfo {
 	return []iamdto.RoleInfo{
 		{
 			RoleKey: "admin", Name: "管理员", Description: "拥有租户配置、员工、渠道、会话和审计的完整管理能力。", Kind: "system", Status: "active",
-			Scopes: roleScopes("admin"),
+			Scopes: builtinRoleScopes("admin"),
 		},
 		{
 			RoleKey: "supervisor", Name: "主管", Description: "查看租户会话，分配和接管会话，查看运营状态。", Kind: "system", Status: "active",
-			Scopes: roleScopes("supervisor"),
+			Scopes: builtinRoleScopes("supervisor"),
 		},
-		{RoleKey: "agent", Name: "客服", Description: "处理分配给自己的会话并发送人工回复。", Kind: "system", Status: "active", Scopes: roleScopes("agent")},
-		{RoleKey: "auditor", Name: "审计员", Description: "只读查看审计日志和敏感操作记录。", Kind: "system", Status: "active", Scopes: roleScopes("auditor")},
-		{RoleKey: "developer", Name: "开发者", Description: "管理渠道接入凭证并排查消息链路。", Kind: "system", Status: "active", Scopes: roleScopes("developer")},
+		{RoleKey: "agent", Name: "客服", Description: "处理分配给自己的会话并发送人工回复。", Kind: "system", Status: "active", Scopes: builtinRoleScopes("agent")},
+		{RoleKey: "auditor", Name: "审计员", Description: "只读查看审计日志和敏感操作记录。", Kind: "system", Status: "active", Scopes: builtinRoleScopes("auditor")},
+		{RoleKey: "developer", Name: "开发者", Description: "管理渠道接入凭证并排查消息链路。", Kind: "system", Status: "active", Scopes: builtinRoleScopes("developer")},
 	}
 }
 

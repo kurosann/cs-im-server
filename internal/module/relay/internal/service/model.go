@@ -13,6 +13,9 @@ type AIEmployeeBinding = configmodel.AIEmployeeBinding
 type AIEmployeeExecution = configmodel.AIEmployeeExecution
 type HistoryDiagnostics = configmodel.HistoryDiagnostics
 type Delivery = configmodel.Delivery
+type KnowledgeGroup = configmodel.KnowledgeGroup
+type KnowledgeBase = configmodel.KnowledgeBase
+type KnowledgeDoc = configmodel.KnowledgeDoc
 
 type RealtimePublisher interface {
 	Publish(eventType, targetID string, payload any)

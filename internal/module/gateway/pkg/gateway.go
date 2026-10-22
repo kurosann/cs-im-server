@@ -66,3 +66,7 @@ func GetRealtimeSubscriber() RealtimeSubscriber {
 func GetRealtimePublisher() RealtimePublisher {
 	return gatewayruntime.RealtimePublisherCapability()
 }
+
+func SetCustomerMessageObserver(fn func(Message)) {
+	gatewayruntime.SetCustomerMessageObserver(fn)
+}
