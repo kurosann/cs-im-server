@@ -59,7 +59,7 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 		Prefix:   "/v1",
 		Handlers: routes.Handlers(),
 		Middlewares: []commonmodule.HttpMiddleware{
-			iamhttp.AccountTokenMiddleware(),
+			iamhttp.AccountTokenMiddleware(iampkg.Service()),
 			iamhttp.RequirePrincipalKind(iampkg.PrincipalKindHuman),
 			iamhttp.RequirePrincipalScope(iampkg.ScopeGatewayAdmin),
 		},
