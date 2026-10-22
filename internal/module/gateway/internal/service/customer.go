@@ -13,6 +13,8 @@ import (
 
 type CustomerService struct {
 	mu            sync.RWMutex
+	loadOnce      sync.Once
+	loadErr       error
 	accessor      dataaccess.DataAccessor[*Customer]
 	customers     map[string]*Customer
 	realtime      *RealtimeService
@@ -31,6 +33,9 @@ func (s *CustomerService) SetConversations(conversations ConversationRetargeter)
 }
 
 func (s *CustomerService) EnsureExternal(_ context.Context, appID string, req gatewaydto.EnsureExternalCustomerRequest) (Customer, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return Customer{}, err
+	}
 	if req.ExternalID == "" {
 		return Customer{}, badRequest("customerExternalId is required")
 	}
@@ -40,6 +45,19 @@ func (s *CustomerService) EnsureExternal(_ context.Context, appID string, req ga
 	for _, customer := range s.customers {
 		for _, identity := range customer.Identities {
 			if identity.Type == identityType && identity.ExternalID == req.ExternalID {
+				if req.DisplayName != "" {
+					if customer.Name != req.DisplayName {
+						customer.Name = req.DisplayName
+					}
+					for index := range customer.Identities {
+						if customer.Identities[index].Type == identityType && customer.Identities[index].ExternalID == req.ExternalID {
+							customer.Identities[index].DisplayName = req.DisplayName
+						}
+					}
+					if err := s.accessor.Save(context.Background(), customer); err != nil {
+						return Customer{}, err
+					}
+				}
 				return *customer, nil
 			}
 		}
@@ -47,9 +65,6 @@ func (s *CustomerService) EnsureExternal(_ context.Context, appID string, req ga
 
 	now := time.Now().UTC()
 	name := req.DisplayName
-	if name == "" {
-		name = req.Channel + ":" + req.ExternalID
-	}
 	customer := &Customer{
 		CustomerKey: "cus_" + idutil.GenShortId(),
 		Name:        name,
@@ -67,11 +82,14 @@ func (s *CustomerService) EnsureExternal(_ context.Context, appID string, req ga
 	}
 	s.customers[customer.CustomerKey] = customer
 	result := *customer
-	s.realtime.Publish("customer.created", customer.CustomerKey, result)
+	s.realtime.Publish("customer.created", customer.CustomerKey, customerToDTO(&result))
 	return result, nil
 }
 
 func (s *CustomerService) Create(_ context.Context, req gatewaydto.CreateCustomerRequest) (Customer, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return Customer{}, err
+	}
 	if req.Name == "" {
 		return Customer{}, badRequest("name is required")
 	}
@@ -96,11 +114,14 @@ func (s *CustomerService) Create(_ context.Context, req gatewaydto.CreateCustome
 	}
 	s.customers[customer.CustomerKey] = customer
 	result := *customer
-	s.realtime.Publish("customer.created", customer.CustomerKey, result)
+	s.realtime.Publish("customer.created", customer.CustomerKey, customerToDTO(&result))
 	return result, nil
 }
 
 func (s *CustomerService) Get(_ context.Context, id string) (Customer, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return Customer{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	customer, ok := s.customers[id]
@@ -111,6 +132,9 @@ func (s *CustomerService) Get(_ context.Context, id string) (Customer, error) {
 }
 
 func (s *CustomerService) AddIdentity(_ context.Context, customerID string, req gatewaydto.AddIdentityRequest) (Customer, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return Customer{}, err
+	}
 	if req.Type == "" {
 		return Customer{}, badRequest("type is required")
 	}
@@ -135,11 +159,14 @@ func (s *CustomerService) AddIdentity(_ context.Context, customerID string, req 
 		return Customer{}, err
 	}
 	result := *customer
-	s.realtime.Publish("customer.identity_added", customer.CustomerKey, result)
+	s.realtime.Publish("customer.identity_added", customer.CustomerKey, customerToDTO(&result))
 	return result, nil
 }
 
 func (s *CustomerService) Merge(_ context.Context, targetID string, req gatewaydto.MergeCustomerRequest) (Customer, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return Customer{}, err
+	}
 	if req.SourceCustomerID == "" {
 		return Customer{}, badRequest("sourceCustomerId is required")
 	}
@@ -171,11 +198,22 @@ func (s *CustomerService) Merge(_ context.Context, targetID string, req gatewayd
 		}
 	}
 	result := *target
-	s.realtime.Publish("customer.merged", target.CustomerKey, result)
+	s.realtime.Publish("customer.merged", target.CustomerKey, customerToDTO(target))
 	return result, nil
 }
 
 func (s *CustomerService) Load() error {
+	return s.ensureLoaded()
+}
+
+func (s *CustomerService) ensureLoaded() error {
+	s.loadOnce.Do(func() {
+		s.loadErr = s.load()
+	})
+	return s.loadErr
+}
+
+func (s *CustomerService) load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	items, err := s.accessor.List(context.Background())

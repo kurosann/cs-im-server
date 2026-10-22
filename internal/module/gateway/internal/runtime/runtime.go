@@ -3,33 +3,38 @@ package runtime
 import (
 	"context"
 	gatewaydto "cs-im-server/internal/module/gateway/dto"
+	"cs-im-server/internal/module/gateway/internal/model"
 	"sync"
 
-	"cs-im-server/internal/module/gateway/internal/model"
 	"cs-im-server/internal/module/gateway/internal/service"
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 )
 
+type RealtimeEvent = service.RealtimeEvent
+
 type AppAuthorizer interface {
 	AuthorizeAccount(appID string, principal iampkg.Principal) error
 	MarkConnected(appID string)
+	Heartbeat(ctx context.Context, principal iampkg.Principal, req gatewaydto.HeartbeatRequest) (gatewaydto.App, error)
 }
 
 type ConversationIngress interface {
-	Ensure(ctx context.Context, appID string, req gatewaydto.EnsureConversationRequest) (model.Conversation, bool, error)
-	Get(ctx context.Context, id string) (model.Conversation, error)
+	Ensure(ctx context.Context, appID string, req gatewaydto.EnsureConversationRequest) (gatewaydto.Conversation, bool, error)
+	Get(ctx context.Context, id string) (gatewaydto.Conversation, error)
 }
 
 type MessageIngress interface {
-	CreateChannelMessage(ctx context.Context, appID string, req gatewaydto.CreateMessageRequest) (model.Message, error)
+	CreateChannelMessage(ctx context.Context, appID string, req gatewaydto.CreateMessageRequest) (gatewaydto.Message, error)
+	CreateChannelMessages(ctx context.Context, appID string, req gatewaydto.BatchCreateMessagesRequest) (gatewaydto.BatchCreateMessagesResult, error)
 	History(ctx context.Context, appID, conversationID string, filter gatewaydto.MessageHistoryFilter) (gatewaydto.MessageHistoryPage, error)
+	Offset(ctx context.Context, appID, conversationID string) (gatewaydto.MessageOffset, error)
 	ChannelEventAllowed(appID string, event service.RealtimeEvent) bool
 }
 
 type MessageEgress interface {
-	CreateRelayMessage(ctx context.Context, relayID string, req gatewaydto.CreateMessageRequest) (model.Message, error)
-	CreateAIReply(ctx context.Context, conversationID, employeeID, text string) (model.Message, error)
-	RecentMessages(ctx context.Context, conversationID string, limit int) ([]model.Message, error)
+	CreateRelayMessage(ctx context.Context, relayID string, req gatewaydto.CreateMessageRequest) (gatewaydto.Message, error)
+	CreateAIReply(ctx context.Context, conversationID, employeeID, text string) (gatewaydto.Message, error)
+	RecentMessages(ctx context.Context, conversationID string, limit int) ([]gatewaydto.Message, error)
 	RelayHistory(ctx context.Context, conversationID string, filter gatewaydto.MessageHistoryFilter) (gatewaydto.MessageHistoryPage, error)
 	RelayEventAllowed(event service.RealtimeEvent) bool
 }

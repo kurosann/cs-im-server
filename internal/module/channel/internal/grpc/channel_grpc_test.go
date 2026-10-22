@@ -5,10 +5,12 @@ import (
 	"testing"
 	"time"
 
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	gatewayv1 "github.com/kurosann/cs-im-sdk/gateway/v1"
 	"vane-common/pkg/dataaccess/store"
+	"vane-common/pkg/safe"
 	"vane-common/pkg/sqlitedb"
 
 	"google.golang.org/grpc/codes"
@@ -45,10 +47,12 @@ func setupChannelGateway(t *testing.T) channelGatewayFixture {
 	t.Cleanup(func() { _ = db.Close() })
 	store.RegisterRelationDB("main", store.RelationStore{DB: db.DB, Closer: db})
 	if err := db.AutoMigrate(
-		&iampkg.AccountToken{}, &iampkg.ChannelCredential{}, &gatewaypkg.App{}, &gatewaypkg.Customer{},
-		&gatewaypkg.Conversation{}, &gatewaypkg.Message{},
+		&iampkg.AccountToken{}, &iampkg.ChannelCredential{},
 	); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
+	}
+	if err := gatewaypkg.AutoMigrateTestModels(db.DB); err != nil {
+		t.Fatalf("migrate gateway models: %v", err)
 	}
 
 	services := gatewaypkg.NewTestGatewayServices()
@@ -57,7 +61,7 @@ func setupChannelGateway(t *testing.T) channelGatewayFixture {
 	messages := services.Messages
 	realtime := services.Realtime
 	principal := iampkg.Principal{AccountKey: "account_1", TenantID: "tenant_1"}
-	app, err := apps.Register(context.Background(), principal, gatewaypkg.RegisterAppRequest{
+	app, err := apps.Register(context.Background(), principal, gatewaydto.RegisterAppRequest{
 		ServiceKey: "service-1", DisplayName: "Service",
 	})
 	if err != nil {
@@ -129,15 +133,18 @@ func TestChannelGatewayCustomerBoundary(t *testing.T) {
 	agentRequest := &gatewayv1.SendMessageRequest{
 		AppId: fixture.appID, ConversationId: conversation.ConversationId,
 		CustomerId: conversation.CustomerId,
-		Sender:     &gatewayv1.MessageSender{Role: "agent", Id: conversation.CustomerId},
+		Sender:     &gatewayv1.MessageSender{Role: "agent", Id: fixture.appID},
 		Type:       "text", Text: "agent message",
 		Source: &gatewayv1.MessageSource{
 			AppId: fixture.appID, ExternalId: "agent-1", SentAt: sentAt,
 		},
 	}
-	_, err = fixture.api.SendMessage(ctx, agentRequest)
-	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("SendMessage(agent) error = %v, want PermissionDenied", err)
+	agent, err := fixture.api.SendMessage(ctx, agentRequest)
+	if err != nil {
+		t.Fatalf("SendMessage(agent) error = %v", err)
+	}
+	if agent.Message.Sender.Role != "agent" || agent.Message.Source.ExternalId != "agent-1" {
+		t.Fatalf("SendMessage(agent) = %+v", agent)
 	}
 
 	customer, err := fixture.api.SendMessage(ctx, &gatewayv1.SendMessageRequest{
@@ -162,7 +169,7 @@ func TestChannelGatewayCustomerBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListMessages() error = %v", err)
 	}
-	if len(page.Items) != 1 || page.Items[0].MessageId != customer.Message.MessageId {
+	if len(page.Items) != 2 || page.Items[0].MessageId != agent.Message.MessageId || page.Items[1].MessageId != customer.Message.MessageId {
 		t.Fatalf("ListMessages() = %+v", page)
 	}
 }
@@ -176,22 +183,22 @@ func TestChannelGatewayStreamFiltersCustomerMessages(t *testing.T) {
 		events:  make(chan gatewayv1.MessageEventResponse, 2),
 	}
 	streamDone := make(chan error, 1)
-	go func() {
+	safe.Go(func() {
 		streamDone <- fixture.api.StreamMessages(&gatewayv1.StreamMessagesRequest{AppId: fixture.appID}, stream)
-	}()
+	})
 
 	published := false
 	for i := 0; i < 10; i++ {
 		time.Sleep(10 * time.Millisecond)
 		if !published {
-			fixture.realtime.Publish("message.created", "msg_1", gatewaypkg.Message{
+			fixture.realtime.Publish("message.created", "msg_1", gatewaydto.Message{
 				MessageKey: "msg_1", ConversationKey: fixture.conversationID, CustomerKey: "cus_1",
-				SenderRole: "customer", SenderID: "cus_1", Type: "text", Text: "blocked",
+				Sender: gatewaydto.MessageSender{Role: "customer", ID: "cus_1"}, Type: "text", Text: "blocked",
 			})
 		}
-		fixture.realtime.Publish("message.created", "msg_2", gatewaypkg.Message{
+		fixture.realtime.Publish("message.created", "msg_2", gatewaydto.Message{
 			MessageKey: "msg_2", ConversationKey: fixture.conversationID, CustomerKey: "cus_1",
-			SenderRole: "agent", SenderID: "agent_1", Type: "text", Text: "allowed",
+			Sender: gatewaydto.MessageSender{Role: "agent", ID: "agent_1"}, Type: "text", Text: "allowed",
 		})
 		published = true
 		select {

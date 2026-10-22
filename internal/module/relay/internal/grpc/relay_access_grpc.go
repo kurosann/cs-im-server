@@ -2,8 +2,8 @@ package grpc
 
 import (
 	"context"
-	"time"
 
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	"cs-im-server/pkg/grpcapi"
@@ -36,52 +36,52 @@ func (a *RelayAccessGRPCAPI) relayPrincipal(ctx context.Context) (iampkg.Princip
 	return principal, nil
 }
 
-func relayMessageToProto(item gatewaypkg.Message) *relayv1.RelayMessage {
+func relayMessageToProto(item gatewaydto.Message) *relayv1.RelayMessage {
 	message := &relayv1.RelayMessage{
 		MessageId:      item.MessageKey,
 		Seq:            item.Seq,
 		ConversationId: item.ConversationKey,
 		CustomerId:     item.CustomerKey,
 		Sender: &relayv1.RelayMessageSender{
-			Role: item.SenderRole,
-			Id:   item.SenderID,
+			Role: item.Sender.Role,
+			Id:   item.Sender.ID,
 		},
 		Type:       item.Type,
 		Text:       item.Text,
 		Status:     item.Status,
-		ReceivedAt: item.BaseModel.CreateAt.Format(time.RFC3339Nano),
-		CreatedAt:  item.CreatedAt().Format(time.RFC3339Nano),
-		UpdatedAt:  item.BaseModel.UpdateAt.Format(time.RFC3339Nano),
+		ReceivedAt: item.ReceivedAt,
+		CreatedAt:  item.CreatedAt,
+		UpdatedAt:  item.UpdatedAt,
 	}
-	if item.Media != nil {
+	if item.Content != nil {
 		message.Content = &relayv1.RelayMessageContent{
-			Url:             item.Media.URL,
-			MimeType:        item.Media.MimeType,
-			FileName:        item.Media.FileName,
-			Size:            item.Media.Size,
-			Width:           int32(item.Media.Width),
-			Height:          int32(item.Media.Height),
-			DurationSeconds: int32(item.Media.DurationSeconds),
-			ThumbnailUrl:    item.Media.ThumbnailURL,
-			Checksum:        item.Media.Checksum,
+			Url:             item.Content.URL,
+			MimeType:        item.Content.MimeType,
+			FileName:        item.Content.FileName,
+			Size:            item.Content.Size,
+			Width:           int32(item.Content.Width),
+			Height:          int32(item.Content.Height),
+			DurationSeconds: int32(item.Content.DurationSeconds),
+			ThumbnailUrl:    item.Content.ThumbnailURL,
+			Checksum:        item.Content.Checksum,
 		}
 	}
 	return message
 }
 
-func relayMessageFromRequest(req *relayv1.SendRelayMessageRequest) gatewaypkg.CreateMessageRequest {
+func relayMessageFromRequest(req *relayv1.SendRelayMessageRequest) gatewaydto.CreateMessageRequest {
 	if req == nil {
-		return gatewaypkg.CreateMessageRequest{}
+		return gatewaydto.CreateMessageRequest{}
 	}
-	request := gatewaypkg.CreateMessageRequest{
+	request := gatewaydto.CreateMessageRequest{
 		ConversationKey: req.GetConversationId(),
 		CustomerID:      req.GetCustomerId(),
-		Sender:          gatewaypkg.MessageSender{Role: req.GetSender().GetRole(), ID: req.GetSender().GetId()},
+		Sender:          gatewaydto.MessageSender{Role: req.GetSender().GetRole(), ID: req.GetSender().GetId()},
 		Type:            req.GetType(),
 		Text:            req.GetText(),
 	}
 	if item := req.GetContent(); item != nil {
-		request.Content = &gatewaypkg.MessageMedia{
+		request.Content = &gatewaydto.MessageMedia{
 			URL:             item.GetUrl(),
 			MimeType:        item.GetMimeType(),
 			FileName:        item.GetFileName(),
@@ -154,7 +154,7 @@ func (a *RelayAccessGRPCAPI) StreamRelayMessages(req *relayv1.StreamRelayMessage
 				continue
 			}
 			response := &relayv1.RelayMessageEventResponse{EventType: event.Type}
-			if message, ok := event.Data.(gatewaypkg.Message); ok {
+			if message, ok := event.Data.(gatewaydto.Message); ok {
 				response.Message = relayMessageToProto(message)
 			}
 			if err := stream.Send(response); err != nil {

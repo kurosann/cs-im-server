@@ -64,7 +64,7 @@ func TestCreateNotifiesCustomerMessagesOnly(t *testing.T) {
 	created, err := messages.Create(context.Background(), gatewaydto.CreateMessageRequest{
 		ConversationKey: "conv_1",
 		CustomerID:      "cus_1",
-		Sender:          MessageSender{Role: "customer", ID: "cus_1"},
+		Sender:          gatewaydto.MessageSender{Role: "customer", ID: "cus_1"},
 		Type:            "text",
 		Text:            "你好",
 	})
@@ -79,7 +79,7 @@ func TestCreateNotifiesCustomerMessagesOnly(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatalf("customer message %s was not observed", created.MessageKey)
 	}
-	if !messages.RelayEventAllowed(RealtimeEvent{Type: "message.created", Data: Message{SenderRole: "ai"}}) {
+	if !messages.RelayEventAllowed(RealtimeEvent{Type: "message.created", Data: gatewaydto.Message{Sender: gatewaydto.MessageSender{Role: "ai"}}}) {
 		t.Fatal("relay stream did not allow ai replies")
 	}
 }

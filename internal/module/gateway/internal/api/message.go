@@ -69,6 +69,33 @@ func (a *MessageAPI) History(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", page)
 }
 
+func (a *MessageAPI) ReverseHistory(ctx httpapi.Context) {
+	var req gatewaydto.BatchCreateMessagesRequest
+	if err := ctx.BindJSON(&req); err != nil {
+		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	queryFilter, err := seqquery.FromHTTP(ctx)
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	page, createdCount, err := a.Service.ReverseHistory(ctx.Context(), ctx.Param("id"), req, gatewaydto.MessageHistoryFilter{
+		AfterSeq:  queryFilter.AfterSeq,
+		BeforeSeq: queryFilter.BeforeSeq,
+		Limit:     queryFilter.Limit,
+		Order:     queryFilter.Order,
+	})
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", map[string]any{
+		"page":         page,
+		"createdCount": createdCount,
+	})
+}
+
 func (a *MessageAPI) AdminRoutes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/messages")
 	routes.Post("", a.Create)
@@ -81,6 +108,7 @@ func (a *MessageAPI) AdminConversationRoutes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/conversations")
 	routes.Get("/:id/messages", a.ConversationMessages)
 	routes.Get("/:id/messages/:conversationId", a.History)
+	routes.Post("/:id/channel-history", a.ReverseHistory)
 	return routes
 }
 

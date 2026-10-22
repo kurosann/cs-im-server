@@ -13,6 +13,12 @@ import (
 
 type RelayService struct {
 	mu               sync.RWMutex
+	channelOnce      sync.Once
+	channelErr       error
+	webhookOnce      sync.Once
+	webhookErr       error
+	aiOnce           sync.Once
+	aiErr            error
 	channelAccessor  dataaccess.DataAccessor[*Channel]
 	webhookAccessor  dataaccess.DataAccessor[*Webhook]
 	aiConfigAccessor dataaccess.DataAccessor[*AIConfig]
@@ -47,6 +53,9 @@ func NewRelayService(realtime RealtimePublisher) *RelayService {
 }
 
 func (s *RelayService) CreateChannel(_ context.Context, req relaydto.CreateChannelRequest) (Channel, error) {
+	if err := s.ensureChannels(); err != nil {
+		return Channel{}, err
+	}
 	if req.Name == "" {
 		return Channel{}, badRequest("name is required")
 	}
@@ -66,6 +75,9 @@ func (s *RelayService) CreateChannel(_ context.Context, req relaydto.CreateChann
 }
 
 func (s *RelayService) ListChannels(_ context.Context) []Channel {
+	if err := s.ensureChannels(); err != nil {
+		return []Channel{}
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	channels := make([]Channel, 0, len(s.channels))
@@ -76,6 +88,9 @@ func (s *RelayService) ListChannels(_ context.Context) []Channel {
 }
 
 func (s *RelayService) GetChannel(_ context.Context, id string) (Channel, error) {
+	if err := s.ensureChannels(); err != nil {
+		return Channel{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	channel, ok := s.channels[id]
@@ -86,6 +101,9 @@ func (s *RelayService) GetChannel(_ context.Context, id string) (Channel, error)
 }
 
 func (s *RelayService) UpdateChannel(_ context.Context, id string, req relaydto.UpdateChannelRequest) (Channel, error) {
+	if err := s.ensureChannels(); err != nil {
+		return Channel{}, err
+	}
 	now := time.Now().UTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -115,6 +133,9 @@ func (s *RelayService) UpdateChannel(_ context.Context, id string, req relaydto.
 }
 
 func (s *RelayService) SetChannelStatus(_ context.Context, id string, enabled bool) (Channel, error) {
+	if err := s.ensureChannels(); err != nil {
+		return Channel{}, err
+	}
 	now := time.Now().UTC()
 	status := "disabled"
 	if enabled {
@@ -137,6 +158,9 @@ func (s *RelayService) SetChannelStatus(_ context.Context, id string, enabled bo
 }
 
 func (s *RelayService) TestChannel(_ context.Context, id string) (Channel, error) {
+	if err := s.ensureChannels(); err != nil {
+		return Channel{}, err
+	}
 	now := time.Now().UTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -155,6 +179,9 @@ func (s *RelayService) TestChannel(_ context.Context, id string) (Channel, error
 }
 
 func (s *RelayService) CreateWebhook(_ context.Context, req relaydto.CreateWebhookRequest) (Webhook, error) {
+	if err := s.ensureWebhooks(); err != nil {
+		return Webhook{}, err
+	}
 	if req.Name == "" {
 		return Webhook{}, badRequest("name is required")
 	}
@@ -177,6 +204,9 @@ func (s *RelayService) CreateWebhook(_ context.Context, req relaydto.CreateWebho
 }
 
 func (s *RelayService) ListWebhooks(_ context.Context) []Webhook {
+	if err := s.ensureWebhooks(); err != nil {
+		return []Webhook{}
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	webhooks := make([]Webhook, 0, len(s.webhooks))
@@ -187,6 +217,9 @@ func (s *RelayService) ListWebhooks(_ context.Context) []Webhook {
 }
 
 func (s *RelayService) GetWebhook(_ context.Context, id string) (Webhook, error) {
+	if err := s.ensureWebhooks(); err != nil {
+		return Webhook{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	webhook, ok := s.webhooks[id]
@@ -197,6 +230,9 @@ func (s *RelayService) GetWebhook(_ context.Context, id string) (Webhook, error)
 }
 
 func (s *RelayService) UpdateWebhook(_ context.Context, id string, req relaydto.UpdateWebhookRequest) (Webhook, error) {
+	if err := s.ensureWebhooks(); err != nil {
+		return Webhook{}, err
+	}
 	now := time.Now().UTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -226,6 +262,9 @@ func (s *RelayService) UpdateWebhook(_ context.Context, id string, req relaydto.
 }
 
 func (s *RelayService) TestWebhook(_ context.Context, id string) (Webhook, error) {
+	if err := s.ensureWebhooks(); err != nil {
+		return Webhook{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	webhook, ok := s.webhooks[id]
@@ -236,6 +275,9 @@ func (s *RelayService) TestWebhook(_ context.Context, id string) (Webhook, error
 }
 
 func (s *RelayService) SetWebhookStatus(_ context.Context, id string, enabled bool) (Webhook, error) {
+	if err := s.ensureWebhooks(); err != nil {
+		return Webhook{}, err
+	}
 	now := time.Now().UTC()
 	status := "disabled"
 	if enabled {
@@ -258,6 +300,9 @@ func (s *RelayService) SetWebhookStatus(_ context.Context, id string, enabled bo
 }
 
 func (s *RelayService) DeleteWebhook(_ context.Context, id string) error {
+	if err := s.ensureWebhooks(); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	webhook, ok := s.webhooks[id]
@@ -273,12 +318,18 @@ func (s *RelayService) DeleteWebhook(_ context.Context, id string) error {
 }
 
 func (s *RelayService) GetAIConfig(_ context.Context) AIConfig {
+	if err := s.ensureAIConfig(); err != nil {
+		return AIConfig{}
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.aiConfig
 }
 
 func (s *RelayService) UpdateAIConfig(_ context.Context, req AIConfig) AIConfig {
+	if err := s.ensureAIConfig(); err != nil {
+		return AIConfig{}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	item := req
@@ -293,6 +344,9 @@ func (s *RelayService) UpdateAIConfig(_ context.Context, req AIConfig) AIConfig 
 }
 
 func (s *RelayService) ListAIExecutions(_ context.Context) []AIExecution {
+	if err := s.ensureAIConfig(); err != nil {
+		return []AIExecution{}
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	executions := make([]AIExecution, 0, len(s.aiExecutions))
@@ -303,6 +357,37 @@ func (s *RelayService) ListAIExecutions(_ context.Context) []AIExecution {
 }
 
 func (s *RelayService) Load() error {
+	if err := s.ensureChannels(); err != nil {
+		return err
+	}
+	if err := s.ensureWebhooks(); err != nil {
+		return err
+	}
+	return s.ensureAIConfig()
+}
+
+func (s *RelayService) ensureChannels() error {
+	s.channelOnce.Do(func() {
+		s.channelErr = s.loadChannels()
+	})
+	return s.channelErr
+}
+
+func (s *RelayService) ensureWebhooks() error {
+	s.webhookOnce.Do(func() {
+		s.webhookErr = s.loadWebhooks()
+	})
+	return s.webhookErr
+}
+
+func (s *RelayService) ensureAIConfig() error {
+	s.aiOnce.Do(func() {
+		s.aiErr = s.loadAIConfig()
+	})
+	return s.aiErr
+}
+
+func (s *RelayService) loadChannels() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	channels, err := s.channelAccessor.List(context.Background())
@@ -312,6 +397,12 @@ func (s *RelayService) Load() error {
 	for _, channel := range channels {
 		s.channels[channel.ChannelKey] = channel
 	}
+	return nil
+}
+
+func (s *RelayService) loadWebhooks() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	webhooks, err := s.webhookAccessor.List(context.Background())
 	if err != nil {
 		return err
@@ -319,6 +410,12 @@ func (s *RelayService) Load() error {
 	for _, webhook := range webhooks {
 		s.webhooks[webhook.WebhookKey] = webhook
 	}
+	return nil
+}
+
+func (s *RelayService) loadAIConfig() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	aiConfigs, err := s.aiConfigAccessor.List(context.Background())
 	if err != nil {
 		return err

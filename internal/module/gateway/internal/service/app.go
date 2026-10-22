@@ -15,6 +15,8 @@ import (
 
 type AppService struct {
 	mu           sync.RWMutex
+	loadOnce     sync.Once
+	loadErr      error
 	accessor     dataaccess.DataAccessor[*App]
 	apps         map[string]*App
 	idsByService map[string]string
@@ -29,12 +31,15 @@ func NewAppService(realtime *RealtimeService) *AppService {
 	}
 }
 
-func (s *AppService) Register(_ context.Context, principal Principal, req gatewaydto.RegisterAppRequest) (App, error) {
+func (s *AppService) Register(_ context.Context, principal Principal, req gatewaydto.RegisterAppRequest) (gatewaydto.App, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return gatewaydto.App{}, err
+	}
 	if req.ServiceKey == "" {
-		return App{}, badRequest("serviceKey is required")
+		return gatewaydto.App{}, badRequest("serviceKey is required")
 	}
 	if req.DisplayName == "" {
-		return App{}, badRequest("displayName is required")
+		return gatewaydto.App{}, badRequest("displayName is required")
 	}
 
 	now := time.Now().UTC()
@@ -49,9 +54,9 @@ func (s *AppService) Register(_ context.Context, principal Principal, req gatewa
 		app.Capabilities = cloneStrings(req.Capabilities)
 		app.UpdateAt = now
 		if err := s.accessor.Save(context.Background(), app); err != nil {
-			return App{}, err
+			return gatewaydto.App{}, err
 		}
-		return *app, nil
+		return appToDTO(app), nil
 	}
 
 	id := "app_" + idutil.GenShortId()
@@ -70,16 +75,19 @@ func (s *AppService) Register(_ context.Context, principal Principal, req gatewa
 		app.LeaseTTLSeconds = req.LeaseTTLSeconds
 	}
 	if err := s.accessor.Save(context.Background(), app); err != nil {
-		return App{}, err
+		return gatewaydto.App{}, err
 	}
 	s.apps[app.AppKey] = app
 	s.idsByService[serviceKeyLookupKey(app.TenantID, req.ServiceKey)] = app.AppKey
 	result := *app
-	s.realtime.Publish("app.registered", id, result)
-	return result, nil
+	s.realtime.Publish("app.registered", id, appToDTO(&result))
+	return appToDTO(&result), nil
 }
 
 func (s *AppService) List(_ context.Context, principal Principal) []App {
+	if err := s.ensureLoaded(); err != nil {
+		return []App{}
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	apps := make([]App, 0, len(s.apps))
@@ -94,6 +102,9 @@ func (s *AppService) List(_ context.Context, principal Principal) []App {
 }
 
 func (s *AppService) Get(_ context.Context, id string) (App, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return App{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	app, ok := s.apps[id]
@@ -104,6 +115,9 @@ func (s *AppService) Get(_ context.Context, id string) (App, error) {
 }
 
 func (s *AppService) GetAuthorized(_ context.Context, principal Principal, id string) (App, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return App{}, err
+	}
 	app, err := s.Get(context.Background(), id)
 	if err != nil {
 		return App{}, err
@@ -114,19 +128,22 @@ func (s *AppService) GetAuthorized(_ context.Context, principal Principal, id st
 	return app, nil
 }
 
-func (s *AppService) Heartbeat(_ context.Context, principal Principal, req gatewaydto.HeartbeatRequest) (App, error) {
+func (s *AppService) Heartbeat(_ context.Context, principal Principal, req gatewaydto.HeartbeatRequest) (gatewaydto.App, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return gatewaydto.App{}, err
+	}
 	if req.AppID == "" {
-		return App{}, badRequest("appId is required")
+		return gatewaydto.App{}, badRequest("appId is required")
 	}
 	now := time.Now().UTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	app, ok := s.apps[req.AppID]
 	if !ok {
-		return App{}, notFound("app %s not found", req.AppID)
+		return gatewaydto.App{}, notFound("app %s not found", req.AppID)
 	}
 	if err := s.accessible(app, principal); err != nil {
-		return App{}, err
+		return gatewaydto.App{}, err
 	}
 	ttl := app.LeaseTTLSeconds
 	if req.TTLSeconds > 0 {
@@ -144,14 +161,17 @@ func (s *AppService) Heartbeat(_ context.Context, principal Principal, req gatew
 	app.LeaseExpiresAt = &leaseExpiresAt
 	app.UpdateAt = now
 	if err := s.accessor.Save(context.Background(), app); err != nil {
-		return App{}, err
+		return gatewaydto.App{}, err
 	}
 	result := *app
-	s.realtime.Publish("app.heartbeat", app.AppKey, result)
-	return result, nil
+	s.realtime.Publish("app.heartbeat", app.AppKey, appToDTO(&result))
+	return appToDTO(&result), nil
 }
 
 func (s *AppService) MarkConnected(appID string) {
+	if err := s.ensureLoaded(); err != nil {
+		return
+	}
 	s.mu.Lock()
 	app, ok := s.apps[appID]
 	if !ok || app.Status != "active" {
@@ -169,10 +189,13 @@ func (s *AppService) MarkConnected(appID string) {
 	}
 	result := *app
 	s.mu.Unlock()
-	s.realtime.Publish("app.heartbeat", app.AppKey, result)
+	s.realtime.Publish("app.heartbeat", app.AppKey, appToDTO(&result))
 }
 
 func (s *AppService) SetStatus(_ context.Context, principal Principal, id string, enabled bool) (App, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return App{}, err
+	}
 	now := time.Now().UTC()
 	status := "disabled"
 	if enabled {
@@ -193,7 +216,7 @@ func (s *AppService) SetStatus(_ context.Context, principal Principal, id string
 		return App{}, err
 	}
 	result := *app
-	s.realtime.Publish("app.status_changed", id, result)
+	s.realtime.Publish("app.status_changed", id, appToDTO(&result))
 	return result, nil
 }
 
@@ -220,6 +243,9 @@ func (s *AppService) accessible(app *App, principal Principal) error {
 }
 
 func (s *AppService) AuthorizeAccount(appID string, principal Principal) error {
+	if err := s.ensureLoaded(); err != nil {
+		return err
+	}
 	if appID == "" {
 		return badRequest("appId is required")
 	}
@@ -239,6 +265,17 @@ func (s *AppService) AuthorizeAccount(appID string, principal Principal) error {
 }
 
 func (s *AppService) Load() error {
+	return s.ensureLoaded()
+}
+
+func (s *AppService) ensureLoaded() error {
+	s.loadOnce.Do(func() {
+		s.loadErr = s.load()
+	})
+	return s.loadErr
+}
+
+func (s *AppService) load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	items, err := s.accessor.List(context.Background())

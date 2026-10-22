@@ -4,6 +4,7 @@ import (
 	"context"
 	iamhttp "cs-im-server/internal/module/iam/pkg/http"
 
+	"cs-im-server/internal/cfg"
 	"cs-im-server/internal/module/gateway/internal/api"
 	"cs-im-server/internal/module/gateway/internal/model"
 	gatewayruntime "cs-im-server/internal/module/gateway/internal/runtime"
@@ -28,7 +29,11 @@ type Module struct {
 
 func (m *Module) Init(_ context.Context) error {
 	m.accounts = iampkg.Service()
-	m.realtime = service.NewRealtimeService()
+	var realtimeBus service.RealtimeBus
+	if !cfg.GetServerConfig().Standalone {
+		realtimeBus = service.NewPublishServerRealtimeBus()
+	}
+	m.realtime = service.NewRealtimeService(realtimeBus)
 	m.apps = service.NewAppService(m.realtime)
 	m.customers = service.NewCustomerService(m.realtime)
 	m.conversations = service.NewConversationService(m.apps, m.customers, nil, m.realtime)
@@ -36,11 +41,6 @@ func (m *Module) Init(_ context.Context) error {
 	m.conversations.SetMessages(service.NewConversationMessageStore(m.messages))
 	gatewayruntime.SetCapabilities(m.apps, m.conversations, m.messages, m.realtime, m.realtime, m.messages)
 
-	for _, loaded := range []interface{ Load() error }{m.apps, m.customers, m.conversations, m.messages} {
-		if err := loaded.Load(); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 

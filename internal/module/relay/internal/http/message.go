@@ -3,6 +3,7 @@ package http
 import (
 	"net/http"
 
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	"cs-im-server/pkg/httpapi"
@@ -41,7 +42,7 @@ func (a *RelayMessageAPI) Send(ctx httpapi.Context) {
 	if !ok {
 		return
 	}
-	var req gatewaypkg.CreateMessageRequest
+	var req gatewaydto.CreateMessageRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return

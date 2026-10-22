@@ -16,6 +16,8 @@ import (
 
 type MessageService struct {
 	mu               sync.RWMutex
+	loadOnce         sync.Once
+	loadErr          error
 	accessor         dataaccess.DataAccessor[*Message]
 	messages         map[string]*Message
 	sourceKeys       map[string]string
@@ -31,6 +33,13 @@ var messageStatuses = map[string]bool{
 }
 
 var supportedMessageTypes = map[string]bool{"text": true, "image": true, "file": true, "video": true}
+
+func messageStatusForCreate(role string, requestedStatus string) string {
+	if role == "customer" && messageStatuses[requestedStatus] {
+		return requestedStatus
+	}
+	return "received"
+}
 
 func validateMessage(req *gatewaydto.CreateMessageRequest) error {
 	if req.Type == "" {
@@ -75,6 +84,9 @@ func messageSourceDedupKey(appID, externalID string) string {
 }
 
 func (s *MessageService) Create(_ context.Context, req gatewaydto.CreateMessageRequest) (Message, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return Message{}, err
+	}
 	if req.ConversationKey == "" {
 		return Message{}, badRequest("conversationId is required")
 	}
@@ -121,7 +133,7 @@ func (s *MessageService) Create(_ context.Context, req gatewaydto.CreateMessageR
 	message := &Message{
 		MessageKey: "msg_" + idutil.GenShortId(), Seq: seq, ConversationKey: conversation.ConversationKey, CustomerKey: conversation.CustomerKey,
 		SenderRole: req.Sender.Role, SenderID: req.Sender.ID, SourceAppKey: req.Source.AppID, SourceExternalID: req.Source.ExternalID,
-		SourceSentAt: req.Source.SentAt, SourceDedupKey: sourceKeyPtr, Type: req.Type, Text: req.Text, Media: req.Content, Status: "received",
+		SourceSentAt: req.Source.SentAt, SourceDedupKey: sourceKeyPtr, Type: req.Type, Text: req.Text, Media: messageMediaToModel(req.Content), Status: messageStatusForCreate(req.Sender.Role, req.Status),
 	}
 	if err := s.accessor.Save(context.Background(), message); err != nil {
 		s.mu.Unlock()
@@ -134,7 +146,7 @@ func (s *MessageService) Create(_ context.Context, req gatewaydto.CreateMessageR
 	s.conversationSeq[conversation.ConversationKey] = seq
 	result := *message
 	observer := s.customerObserver
-	s.realtime.Publish("message.created", message.MessageKey, result)
+	s.realtime.Publish("message.created", message.MessageKey, messageToDTO(&result))
 	s.mu.Unlock()
 	if result.SenderRole == "customer" && observer != nil {
 		go observer(result)
@@ -148,24 +160,25 @@ func (s *MessageService) SetCustomerObserver(fn func(Message)) {
 	s.mu.Unlock()
 }
 
-func (s *MessageService) CreateAIReply(_ context.Context, conversationID, employeeID, text string) (Message, error) {
+func (s *MessageService) CreateAIReply(_ context.Context, conversationID, employeeID, text string) (gatewaydto.Message, error) {
 	employeeID = strings.TrimSpace(employeeID)
 	text = strings.TrimSpace(text)
 	if employeeID == "" {
-		return Message{}, badRequest("employee id is required")
+		return gatewaydto.Message{}, badRequest("employee id is required")
 	}
 	if text == "" {
-		return Message{}, badRequest("text is required")
+		return gatewaydto.Message{}, badRequest("text is required")
 	}
-	return s.Create(context.Background(), gatewaydto.CreateMessageRequest{
+	message, err := s.Create(context.Background(), gatewaydto.CreateMessageRequest{
 		ConversationKey: conversationID,
-		Sender:          MessageSender{Role: "ai", ID: employeeID},
+		Sender:          gatewaydto.MessageSender{Role: "ai", ID: employeeID},
 		Type:            "text",
 		Text:            text,
 	})
+	return messageToDTOResult(message, err)
 }
 
-func (s *MessageService) RecentMessages(_ context.Context, conversationID string, limit int) ([]Message, error) {
+func (s *MessageService) RecentMessages(_ context.Context, conversationID string, limit int) ([]gatewaydto.Message, error) {
 	if _, err := s.conversations.Get(context.Background(), conversationID); err != nil {
 		return nil, err
 	}
@@ -175,55 +188,75 @@ func (s *MessageService) RecentMessages(_ context.Context, conversationID string
 	if limit > 100 {
 		limit = 100
 	}
-	return s.List(context.Background(), conversationID, 0, 0, limit), nil
+	messages := s.List(context.Background(), conversationID, 0, 0, limit)
+	items := make([]gatewaydto.Message, 0, len(messages))
+	for i := range messages {
+		items = append(items, messageToDTO(&messages[i]))
+	}
+	return items, nil
 }
 
-func (s *MessageService) CreateChannelMessage(_ context.Context, appID string, req gatewaydto.CreateMessageRequest) (Message, error) {
+func (s *MessageService) CreateChannelMessage(_ context.Context, appID string, req gatewaydto.CreateMessageRequest) (gatewaydto.Message, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return gatewaydto.Message{}, err
+	}
 	if req.Source.ExternalID == "" {
-		return Message{}, badRequest("source.externalId is required")
+		return gatewaydto.Message{}, badRequest("source.externalId is required")
 	}
 	if req.Source.SentAt == nil {
-		return Message{}, badRequest("source.sentAt is required")
+		return gatewaydto.Message{}, badRequest("source.sentAt is required")
 	}
-	if req.Sender.Role != "customer" {
-		return Message{}, forbidden("business channels can only send customer messages")
-	}
-	if req.CustomerID != "" && req.Sender.ID != "" && req.CustomerID != req.Sender.ID {
-		return Message{}, badRequest("customerId does not match sender.id")
+	switch req.Sender.Role {
+	case "agent":
+		if req.Sender.ID == "" {
+			return gatewaydto.Message{}, badRequest("sender.id is required")
+		}
+	case "customer":
+		if req.CustomerID != "" && req.Sender.ID != "" && req.CustomerID != req.Sender.ID {
+			return gatewaydto.Message{}, badRequest("customerId does not match sender.id")
+		}
+	default:
+		return gatewaydto.Message{}, forbidden("business channels can only send customer or agent messages")
 	}
 	req.Source.AppID = appID
 	conversation, err := s.conversations.Get(context.Background(), req.ConversationKey)
 	if err != nil {
-		return Message{}, err
+		return gatewaydto.Message{}, err
 	}
 	if conversation.AppKey != appID {
-		return Message{}, notFound("conversation %s not found", req.ConversationKey)
+		return gatewaydto.Message{}, notFound("conversation %s not found", req.ConversationKey)
 	}
 	if req.CustomerID == "" {
 		req.CustomerID = conversation.CustomerKey
 	}
-	if req.CustomerID != conversation.CustomerKey || req.Sender.ID != conversation.CustomerKey {
-		return Message{}, forbidden("sender must be the conversation customer")
+	if req.Sender.Role == "customer" && (req.CustomerID != conversation.CustomerKey || req.Sender.ID != conversation.CustomerKey) {
+		return gatewaydto.Message{}, forbidden("sender must be the conversation customer")
 	}
-	return s.Create(context.Background(), req)
+	return messageToDTOResult(s.Create(context.Background(), req))
 }
 
-func (s *MessageService) CreateRelayMessage(_ context.Context, relayID string, req gatewaydto.CreateMessageRequest) (Message, error) {
-	if relayID == "" {
-		return Message{}, forbidden("relay identity is required")
+func (s *MessageService) CreateRelayMessage(_ context.Context, relayID string, req gatewaydto.CreateMessageRequest) (gatewaydto.Message, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return gatewaydto.Message{}, err
 	}
-	req.Sender = MessageSender{Role: "agent", ID: relayID}
-	req.Source = MessageSource{}
+	if relayID == "" {
+		return gatewaydto.Message{}, forbidden("relay identity is required")
+	}
+	req.Sender = gatewaydto.MessageSender{Role: "agent", ID: relayID}
+	req.Source = gatewaydto.MessageSource{}
 	req.CustomerID = ""
-	return s.Create(context.Background(), req)
+	return messageToDTOResult(s.Create(context.Background(), req))
 }
 
 func (s *MessageService) ChannelEventAllowed(appID string, event RealtimeEvent) bool {
+	if err := s.ensureLoaded(); err != nil {
+		return false
+	}
 	if event.Type != "message.created" {
 		return false
 	}
-	message, ok := event.Data.(Message)
-	if !ok || message.SenderRole == "customer" {
+	message, ok := event.Data.(gatewaydto.Message)
+	if !ok || message.Sender.Role == "customer" {
 		return false
 	}
 	conversation, err := s.conversations.Get(context.Background(), message.ConversationKey)
@@ -231,15 +264,18 @@ func (s *MessageService) ChannelEventAllowed(appID string, event RealtimeEvent) 
 }
 
 func (s *MessageService) RelayEventAllowed(event RealtimeEvent) bool {
+	if err := s.ensureLoaded(); err != nil {
+		return false
+	}
 	switch event.Type {
 	case "conversation.created":
 		return true
 	case "message.created":
-		message, ok := event.Data.(Message)
+		message, ok := event.Data.(gatewaydto.Message)
 		if !ok {
 			return false
 		}
-		switch message.SenderRole {
+		switch message.Sender.Role {
 		case "customer", "agent", "ai":
 			return true
 		default:
@@ -251,6 +287,9 @@ func (s *MessageService) RelayEventAllowed(event RealtimeEvent) bool {
 }
 
 func (s *MessageService) RelayHistory(_ context.Context, conversationID string, filter gatewaydto.MessageHistoryFilter) (gatewaydto.MessageHistoryPage, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return gatewaydto.MessageHistoryPage{}, err
+	}
 	if filter.Order == "" {
 		filter.Order = "desc"
 	}
@@ -275,12 +314,15 @@ func (s *MessageService) RelayHistory(_ context.Context, conversationID string, 
 			messages[i], messages[j] = messages[j], messages[i]
 		}
 	}
-	page := gatewaydto.MessageHistoryPage{Items: make([]Message, 0, filter.Limit)}
+	page := gatewaydto.MessageHistoryPage{Items: make([]gatewaydto.Message, 0, filter.Limit)}
 	hasMore := len(messages) > filter.Limit
 	if hasMore {
 		messages = messages[:filter.Limit]
 	}
-	page.Items = messages
+	page.Items = make([]gatewaydto.Message, 0, len(messages))
+	for i := range messages {
+		page.Items = append(page.Items, messageToDTO(&messages[i]))
+	}
 	page.HasMore = hasMore
 	if len(messages) > 0 {
 		last := messages[len(messages)-1].Seq
@@ -294,6 +336,9 @@ func (s *MessageService) RelayHistory(_ context.Context, conversationID string, 
 }
 
 func (s *MessageService) UpdateStatus(_ context.Context, id string, req gatewaydto.UpdateMessageStatusRequest) (Message, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return Message{}, err
+	}
 	if !messageStatuses[req.Status] {
 		return Message{}, badRequest("unsupported message status %s", req.Status)
 	}
@@ -310,11 +355,14 @@ func (s *MessageService) UpdateStatus(_ context.Context, id string, req gatewayd
 		return Message{}, err
 	}
 	result := *message
-	s.realtime.Publish("message.status_changed", id, result)
+	s.realtime.Publish("message.status_changed", id, messageToDTO(&result))
 	return result, nil
 }
 
 func (s *MessageService) Get(_ context.Context, id string) (Message, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return Message{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	message, ok := s.messages[id]
@@ -325,6 +373,9 @@ func (s *MessageService) Get(_ context.Context, id string) (Message, error) {
 }
 
 func (s *MessageService) Latest(_ context.Context, conversationID string) (Message, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return Message{}, err
+	}
 	items := s.List(context.Background(), conversationID, 0, 0, 1)
 	if len(items) == 0 {
 		return Message{}, badRequest("conversation has no message to forward")
@@ -333,6 +384,9 @@ func (s *MessageService) Latest(_ context.Context, conversationID string) (Messa
 }
 
 func (s *MessageService) ConversationStats(_ context.Context, conversationID string) (ConversationMessageStats, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return ConversationMessageStats{}, err
+	}
 	messages := s.List(context.Background(), conversationID, 0, 0, 0)
 	stats := ConversationMessageStats{ReplyStatus: "unreplied"}
 	for _, message := range messages {
@@ -350,6 +404,9 @@ func (s *MessageService) ConversationStats(_ context.Context, conversationID str
 }
 
 func (s *MessageService) LastReceivedActivity(_ context.Context, conversationID string) (time.Time, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return time.Time{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -372,6 +429,9 @@ func (s *MessageService) LastReceivedActivity(_ context.Context, conversationID 
 }
 
 func (s *MessageService) MarkConversationRead(_ context.Context, conversationID string) (int, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return 0, err
+	}
 	now := time.Now().UTC()
 	markedCount := 0
 	s.mu.Lock()
@@ -386,12 +446,15 @@ func (s *MessageService) MarkConversationRead(_ context.Context, conversationID 
 			return markedCount, err
 		}
 		markedCount++
-		s.realtime.Publish("message.status_changed", message.MessageKey, *message)
+		s.realtime.Publish("message.status_changed", message.MessageKey, messageToDTO(message))
 	}
 	return markedCount, nil
 }
 
 func (s *MessageService) List(_ context.Context, conversationID string, afterSeq, beforeSeq int64, limit int) []Message {
+	if err := s.ensureLoaded(); err != nil {
+		return []Message{}
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	messages := make([]Message, 0, len(s.messages))
@@ -415,6 +478,9 @@ func (s *MessageService) List(_ context.Context, conversationID string, afterSeq
 }
 
 func (s *MessageService) History(_ context.Context, appID, conversationID string, filter gatewaydto.MessageHistoryFilter) (gatewaydto.MessageHistoryPage, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return gatewaydto.MessageHistoryPage{}, err
+	}
 	if filter.Order == "" {
 		filter.Order = "desc"
 	}
@@ -446,12 +512,15 @@ func (s *MessageService) History(_ context.Context, appID, conversationID string
 			messages[i], messages[j] = messages[j], messages[i]
 		}
 	}
-	page := gatewaydto.MessageHistoryPage{Items: make([]Message, 0, filter.Limit)}
+	page := gatewaydto.MessageHistoryPage{Items: make([]gatewaydto.Message, 0, filter.Limit)}
 	hasMore := len(messages) > filter.Limit
 	if hasMore {
 		messages = messages[:filter.Limit]
 	}
-	page.Items = messages
+	page.Items = make([]gatewaydto.Message, 0, len(messages))
+	for i := range messages {
+		page.Items = append(page.Items, messageToDTO(&messages[i]))
+	}
 	page.HasMore = hasMore
 	if len(messages) > 0 {
 		last := messages[len(messages)-1].Seq
@@ -467,6 +536,9 @@ func (s *MessageService) History(_ context.Context, appID, conversationID string
 }
 
 func (s *MessageService) HistoryForApp(ctx context.Context, appID, conversationID string, filter gatewaydto.MessageHistoryFilter) (any, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return nil, err
+	}
 	page, err := s.History(ctx, appID, conversationID, filter)
 	if err != nil {
 		return nil, err
@@ -474,7 +546,89 @@ func (s *MessageService) HistoryForApp(ctx context.Context, appID, conversationI
 	return page, nil
 }
 
+func (s *MessageService) ReverseHistory(ctx context.Context, conversationID string, req gatewaydto.BatchCreateMessagesRequest, filter gatewaydto.MessageHistoryFilter) (gatewaydto.MessageHistoryPage, int, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return gatewaydto.MessageHistoryPage{}, 0, err
+	}
+	conversation, err := s.conversations.Get(ctx, conversationID)
+	if err != nil {
+		return gatewaydto.MessageHistoryPage{}, 0, err
+	}
+	appID := conversation.AppKey
+
+	before := len(s.List(ctx, conversationID, 0, 0, 0))
+	if len(req.Items) > 0 {
+		if _, err := s.CreateChannelMessages(ctx, appID, req); err != nil {
+			return gatewaydto.MessageHistoryPage{}, 0, err
+		}
+	}
+	after := len(s.List(ctx, conversationID, 0, 0, 0))
+	page, err := s.History(ctx, appID, conversationID, filter)
+	if err != nil {
+		return gatewaydto.MessageHistoryPage{}, 0, err
+	}
+	createdCount := after - before
+	if createdCount < 0 {
+		createdCount = 0
+	}
+	return page, createdCount, nil
+}
+
+func (s *MessageService) Offset(_ context.Context, appID, conversationID string) (gatewaydto.MessageOffset, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return gatewaydto.MessageOffset{}, err
+	}
+	conversation, err := s.conversations.Get(context.Background(), conversationID)
+	if err != nil {
+		return gatewaydto.MessageOffset{}, err
+	}
+	if conversation.AppKey != appID {
+		return gatewaydto.MessageOffset{}, notFound("conversation %s not found", conversationID)
+	}
+	latest := s.List(context.Background(), conversationID, 0, 0, 1)
+	if len(latest) == 0 {
+		return gatewaydto.MessageOffset{ConversationKey: conversationID}, nil
+	}
+	message := latest[len(latest)-1]
+	return gatewaydto.MessageOffset{
+		ConversationKey:  conversationID,
+		LatestSeq:        message.Seq,
+		LatestMessageID:  message.MessageKey,
+		LatestExternalID: message.SourceExternalID,
+		LatestSentAt:     message.SourceSentAt,
+	}, nil
+}
+
+func (s *MessageService) CreateChannelMessages(_ context.Context, appID string, req gatewaydto.BatchCreateMessagesRequest) (gatewaydto.BatchCreateMessagesResult, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return gatewaydto.BatchCreateMessagesResult{}, err
+	}
+	if len(req.Items) == 0 {
+		return gatewaydto.BatchCreateMessagesResult{}, nil
+	}
+	items := make([]gatewaydto.Message, 0, len(req.Items))
+	for _, item := range req.Items {
+		message, err := s.CreateChannelMessage(context.Background(), appID, item)
+		if err != nil {
+			return gatewaydto.BatchCreateMessagesResult{}, err
+		}
+		items = append(items, message)
+	}
+	return gatewaydto.BatchCreateMessagesResult{Items: items}, nil
+}
+
 func (s *MessageService) Load() error {
+	return s.ensureLoaded()
+}
+
+func (s *MessageService) ensureLoaded() error {
+	s.loadOnce.Do(func() {
+		s.loadErr = s.load()
+	})
+	return s.loadErr
+}
+
+func (s *MessageService) load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	items, err := s.accessor.List(context.Background())

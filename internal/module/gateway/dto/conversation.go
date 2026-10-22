@@ -1,10 +1,28 @@
 package dto
 
+import "time"
+
 type CreateConversationRequest struct {
 	AppID      string `json:"appId"`
 	CustomerID string `json:"customerId"`
 	Channel    string `json:"channel"`
 	Subject    string `json:"subject"`
+}
+
+type Conversation struct {
+	ConversationKey string     `json:"conversationId"`
+	AppKey          string     `json:"appId"`
+	CustomerKey     string     `json:"customerId"`
+	Channel         string     `json:"channel,omitempty"`
+	Subject         string     `json:"subject,omitempty"`
+	Status          string     `json:"status"`
+	Assignee        string     `json:"assignee,omitempty"`
+	ForwardedTo     string     `json:"forwardedTo,omitempty"`
+	CloseReason     string     `json:"closeReason,omitempty"`
+	ClosedAt        *time.Time `json:"closedAt,omitempty"`
+	ReceivedAt      string     `json:"receivedAt"`
+	CreatedAt       string     `json:"createdAt"`
+	UpdatedAt       string     `json:"updatedAt"`
 }
 
 type AssignConversationRequest struct {

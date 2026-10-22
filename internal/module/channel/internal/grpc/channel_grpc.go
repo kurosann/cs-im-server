@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	"cs-im-server/pkg/grpcapi"
@@ -37,7 +38,7 @@ func (a *ChannelGatewayGRPCAPI) authorize(ctx context.Context, appID string) err
 	return grpcapi.Error(a.Apps.AuthorizeAccount(appID, principal))
 }
 
-func conversationFromService(item gatewaypkg.Conversation, created bool) *gatewayv1.ConversationResponse {
+func conversationFromService(item gatewaydto.Conversation, created bool) *gatewayv1.ConversationResponse {
 	return &gatewayv1.ConversationResponse{
 		ConversationId: item.ConversationKey,
 		AppId:          item.AppKey,
@@ -49,7 +50,7 @@ func conversationFromService(item gatewaypkg.Conversation, created bool) *gatewa
 	}
 }
 
-func contentFromService(item *gatewaypkg.MessageMedia) *gatewayv1.MessageContent {
+func contentFromService(item *gatewaydto.MessageMedia) *gatewayv1.MessageContent {
 	if item == nil {
 		return nil
 	}
@@ -66,11 +67,11 @@ func contentFromService(item *gatewaypkg.MessageMedia) *gatewayv1.MessageContent
 	}
 }
 
-func contentFromRequest(item *gatewayv1.MessageContent) *gatewaypkg.MessageMedia {
+func contentFromRequest(item *gatewayv1.MessageContent) *gatewaydto.MessageMedia {
 	if item == nil {
 		return nil
 	}
-	return &gatewaypkg.MessageMedia{
+	return &gatewaydto.MessageMedia{
 		URL:             item.Url,
 		MimeType:        item.MimeType,
 		FileName:        item.FileName,
@@ -87,7 +88,7 @@ func (a *ChannelGatewayGRPCAPI) EnsureConversation(ctx context.Context, req *gat
 	if err := a.authorize(ctx, req.AppId); err != nil {
 		return nil, err
 	}
-	conversation, created, err := a.Conversations.Ensure(ctx, req.AppId, gatewaypkg.EnsureConversationRequest{
+	conversation, created, err := a.Conversations.Ensure(ctx, req.AppId, gatewaydto.EnsureConversationRequest{
 		CustomerExternalID: req.CustomerExternalId,
 		CustomerName:       req.CustomerName,
 		Channel:            req.Channel,
@@ -110,28 +111,25 @@ func (a *ChannelGatewayGRPCAPI) GetConversation(ctx context.Context, req *gatewa
 	return conversationFromService(conversation, false), nil
 }
 
-func (a *ChannelGatewayGRPCAPI) messageFromService(item gatewaypkg.Message) *gatewayv1.Message {
-	source := (*gatewayv1.MessageSource)(nil)
-	if item.SourceAppKey != "" || item.SourceExternalID != "" || item.SourceSentAt != nil {
-		source = &gatewayv1.MessageSource{AppId: item.SourceAppKey, ExternalId: item.SourceExternalID}
-		if item.SourceSentAt != nil {
-			source.SentAt = item.SourceSentAt.Format(time.RFC3339Nano)
-		}
+func (a *ChannelGatewayGRPCAPI) messageFromService(item gatewaydto.Message) *gatewayv1.Message {
+	var source *gatewayv1.MessageSource
+	if item.Source != nil {
+		source = &gatewayv1.MessageSource{AppId: item.Source.AppID, ExternalId: item.Source.ExternalID, SentAt: item.Source.SentAt.Format(time.RFC3339Nano)}
 	}
 	return &gatewayv1.Message{
 		MessageId:      item.MessageKey,
 		Seq:            item.Seq,
 		ConversationId: item.ConversationKey,
 		CustomerId:     item.CustomerKey,
-		Sender:         &gatewayv1.MessageSender{Role: item.SenderRole, Id: item.SenderID},
+		Sender:         &gatewayv1.MessageSender{Role: item.Sender.Role, Id: item.Sender.ID},
 		Source:         source,
 		Type:           item.Type,
 		Text:           item.Text,
-		Content:        contentFromService(item.Media),
+		Content:        contentFromService(item.Content),
 		Status:         item.Status,
-		ReceivedAt:     item.BaseModel.CreateAt.Format(time.RFC3339Nano),
-		CreatedAt:      item.CreatedAt().Format(time.RFC3339Nano),
-		UpdatedAt:      item.BaseModel.UpdateAt.Format(time.RFC3339Nano),
+		ReceivedAt:     item.ReceivedAt,
+		CreatedAt:      item.CreatedAt,
+		UpdatedAt:      item.UpdatedAt,
 	}
 }
 
@@ -139,16 +137,16 @@ func (a *ChannelGatewayGRPCAPI) SendMessage(ctx context.Context, req *gatewayv1.
 	if err := a.authorize(ctx, req.AppId); err != nil {
 		return nil, err
 	}
-	request := gatewaypkg.CreateMessageRequest{
+	request := gatewaydto.CreateMessageRequest{
 		ConversationKey: req.ConversationId,
 		CustomerID:      req.CustomerId,
-		Sender:          gatewaypkg.MessageSender{Role: req.Sender.GetRole(), ID: req.Sender.GetId()},
+		Sender:          gatewaydto.MessageSender{Role: req.Sender.GetRole(), ID: req.Sender.GetId()},
 		Type:            req.Type,
 		Text:            req.Text,
 		Content:         contentFromRequest(req.Content),
 	}
 	if req.Source != nil {
-		request.Source = gatewaypkg.MessageSource{AppID: req.Source.AppId, ExternalID: req.Source.ExternalId}
+		request.Source = gatewaydto.MessageSource{AppID: req.Source.AppId, ExternalID: req.Source.ExternalId}
 		if req.Source.SentAt != "" {
 			sentAt, err := time.Parse(time.RFC3339Nano, req.Source.SentAt)
 			if err != nil {
@@ -168,7 +166,7 @@ func (a *ChannelGatewayGRPCAPI) ListMessages(ctx context.Context, req *gatewayv1
 	if err := a.authorize(ctx, req.AppId); err != nil {
 		return nil, err
 	}
-	page, err := a.Messages.History(ctx, req.AppId, req.ConversationId, gatewaypkg.MessageHistoryFilter{
+	page, err := a.Messages.History(ctx, req.AppId, req.ConversationId, gatewaydto.MessageHistoryFilter{
 		AfterSeq:  req.AfterSeq,
 		BeforeSeq: req.BeforeSeq,
 		Limit:     int(req.Limit),
@@ -210,7 +208,7 @@ func (a *ChannelGatewayGRPCAPI) StreamMessages(req *gatewayv1.StreamMessagesRequ
 			if !a.Messages.ChannelEventAllowed(req.AppId, event) {
 				continue
 			}
-			message, ok := event.Data.(gatewaypkg.Message)
+			message, ok := event.Data.(gatewaydto.Message)
 			if !ok {
 				continue
 			}

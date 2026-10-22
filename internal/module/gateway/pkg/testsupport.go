@@ -3,13 +3,17 @@ package gateway
 import (
 	"context"
 
+	"gorm.io/gorm"
+
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
+	gatewaymodel "cs-im-server/internal/module/gateway/internal/model"
 	gatewayruntime "cs-im-server/internal/module/gateway/internal/runtime"
 	"cs-im-server/internal/module/gateway/internal/service"
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 )
 
 type AppTestService interface {
-	Register(ctx context.Context, principal iampkg.Principal, req RegisterAppRequest) (App, error)
+	Register(ctx context.Context, principal iampkg.Principal, req gatewaydto.RegisterAppRequest) (gatewaydto.App, error)
 	AppAuthorizer
 }
 
@@ -23,6 +27,15 @@ type GatewayTestServices struct {
 	Conversations ConversationIngress
 	Messages      MessageIngress
 	Realtime      RealtimeTestService
+}
+
+func AutoMigrateTestModels(db *gorm.DB) error {
+	return db.AutoMigrate(
+		&gatewaymodel.App{},
+		&gatewaymodel.Customer{},
+		&gatewaymodel.Conversation{},
+		&gatewaymodel.Message{},
+	)
 }
 
 func NewTestGatewayServices() GatewayTestServices {

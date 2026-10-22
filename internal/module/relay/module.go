@@ -28,9 +28,6 @@ type Module struct {
 func (m *Module) Init(_ context.Context) error {
 	m.accounts = iampkg.Service()
 	m.relay = relayService.NewRelayService(gatewaypkg.GetRealtimePublisher())
-	if err := m.relay.Load(); err != nil {
-		return err
-	}
 	relaypkg.SetService(m.relay)
 	gatewaybridge.Register(m.relay)
 	return nil

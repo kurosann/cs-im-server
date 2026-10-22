@@ -64,7 +64,9 @@ func TestConversationAPIGetNotFound(t *testing.T) {
 		params: map[string]string{"id": "conv_missing"},
 		body:   &bytes.Buffer{},
 	}
-	NewConversationAPI(service.NewConversationService(nil, nil, nil, nil)).Get(&ctx)
+	conversations := service.NewConversationService(nil, nil, nil, nil)
+	conversations.SetForTest(service.Conversation{})
+	NewConversationAPI(conversations).Get(&ctx)
 
 	if ctx.code != http.StatusNotFound {
 		t.Fatalf("Get() status = %d, want %d", ctx.code, http.StatusNotFound)

@@ -5,6 +5,7 @@ import (
 	"vane-common/dbserver"
 	"vane-common/httpserver"
 	"vane-common/pkg/logger"
+	"vane-common/publish"
 	"vane-common/server"
 
 	"cs-im-server/internal/buildinfo"
@@ -15,14 +16,18 @@ import (
 func main() {
 	_ = cfg.Init("")
 	modules := appmodule.Modules()
+	extensionServers := []server.IServer{
+		dbserver.EnableDBServer(cfg.GetDbConfig),
+		httpserver.EnableHTTPServer(cfg.GetHTTPConfig, modules, httpserver.WithRoutePrefix("")),
+	}
+	if !cfg.GetServerConfig().Standalone {
+		extensionServers = append(extensionServers, publish.EnablePublishServer())
+	}
 	cmd.NewServerCmd(
 		server.NewServer(cfg.ServiceRoleName).
 			WithConfig(cfg.GetServerConfig).
 			RegModule(modules).
-			RegExtendServer(
-				dbserver.EnableDBServer(cfg.GetDbConfig),
-				httpserver.EnableHTTPServer(cfg.GetHTTPConfig, modules, httpserver.WithRoutePrefix("")),
-			),
+			RegExtendServer(extensionServers...),
 	).WithInit(func(configPath string) error {
 		if err := cfg.Init(configPath); err != nil {
 			return err

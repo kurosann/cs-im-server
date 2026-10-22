@@ -14,13 +14,22 @@ type RealtimeService struct {
 	mu            sync.RWMutex
 	subscribers   map[int]chan RealtimeEvent
 	subscriberSeq int
+	bus           RealtimeBus
 }
 
-func NewRealtimeService() *RealtimeService {
-	return &RealtimeService{subscribers: make(map[int]chan RealtimeEvent)}
+func NewRealtimeService(buses ...RealtimeBus) *RealtimeService {
+	realtime := &RealtimeService{subscribers: make(map[int]chan RealtimeEvent)}
+	if len(buses) > 0 && buses[0] != nil {
+		realtime.bus = buses[0]
+	}
+	return realtime
 }
 
 func (s *RealtimeService) Subscribe(ctx context.Context) (<-chan RealtimeEvent, func(), error) {
+	if s.bus != nil {
+		return s.bus.Subscribe(ctx)
+	}
+
 	events := make(chan RealtimeEvent, 64)
 	s.mu.Lock()
 	s.subscriberSeq++
@@ -44,6 +53,17 @@ func (s *RealtimeService) Subscribe(ctx context.Context) (<-chan RealtimeEvent, 
 }
 
 func (s *RealtimeService) Publish(eventType, id string, data any) {
+	event := RealtimeEvent{Type: eventType, ID: id, Data: data, At: time.Now().UTC()}
+	if s.bus != nil {
+		if err := s.bus.Publish(context.Background(), event); err != nil {
+			s.publishLocal(event)
+		}
+		return
+	}
+	s.publishLocal(event)
+}
+
+func (s *RealtimeService) publishLocal(event RealtimeEvent) {
 	s.mu.RLock()
 	subscribers := make([]chan RealtimeEvent, 0, len(s.subscribers))
 	for _, events := range s.subscribers {
@@ -53,7 +73,6 @@ func (s *RealtimeService) Publish(eventType, id string, data any) {
 	if len(subscribers) == 0 {
 		return
 	}
-	event := RealtimeEvent{Type: eventType, ID: id, Data: data, At: time.Now().UTC()}
 	for _, events := range subscribers {
 		select {
 		case events <- event:

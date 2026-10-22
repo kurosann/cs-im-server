@@ -16,6 +16,10 @@ import (
 
 type ConversationService struct {
 	mu                   sync.RWMutex
+	conversationOnce     sync.Once
+	conversationErr      error
+	deliveryOnce         sync.Once
+	deliveryErr          error
 	conversationAccessor dataaccess.DataAccessor[*Conversation]
 	deliveryAccessor     dataaccess.DataAccessor[*Delivery]
 	conversations        map[string]*Conversation
@@ -44,6 +48,7 @@ type ConversationSummary struct {
 	Status         string `json:"status"`
 	Assignee       string `json:"assignee"`
 	LastMessage    string `json:"lastMessage"`
+	LastMessageAt  string `json:"lastMessageAt,omitempty"`
 	UnreadCount    int    `json:"unreadCount"`
 	ReplyStatus    string `json:"replyStatus"`
 	CreatedAt      string `json:"createdAt"`
@@ -76,18 +81,22 @@ func (s *ConversationService) SetMessages(messages MessageStore) {
 }
 
 func (s *ConversationService) SetForTest(conversation Conversation) {
+	s.conversationOnce.Do(func() {})
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	value := conversation
 	s.conversations[conversation.ConversationKey] = &value
 }
 
-func (s *ConversationService) Ensure(ctx context.Context, appID string, req gatewaydto.EnsureConversationRequest) (Conversation, bool, error) {
+func (s *ConversationService) Ensure(ctx context.Context, appID string, req gatewaydto.EnsureConversationRequest) (gatewaydto.Conversation, bool, error) {
+	if err := s.ensureConversations(); err != nil {
+		return gatewaydto.Conversation{}, false, err
+	}
 	if appID == "" {
-		return Conversation{}, false, badRequest("appId is required")
+		return gatewaydto.Conversation{}, false, badRequest("appId is required")
 	}
 	if req.CustomerExternalID == "" {
-		return Conversation{}, false, badRequest("customerExternalId is required")
+		return gatewaydto.Conversation{}, false, badRequest("customerExternalId is required")
 	}
 	customer, err := s.customers.EnsureExternal(ctx, appID, gatewaydto.EnsureExternalCustomerRequest{
 		ExternalID:  req.CustomerExternalID,
@@ -95,15 +104,14 @@ func (s *ConversationService) Ensure(ctx context.Context, appID string, req gate
 		Channel:     req.Channel,
 	})
 	if err != nil {
-		return Conversation{}, false, err
+		return gatewaydto.Conversation{}, false, err
 	}
 
 	s.mu.Lock()
 	for _, conversation := range s.conversations {
 		if conversation.AppKey == appID && conversation.CustomerKey == customer.CustomerKey && conversation.Status == "open" {
-			result := *conversation
 			s.mu.Unlock()
-			return result, false, nil
+			return conversationToDTO(conversation), false, nil
 		}
 	}
 	s.mu.Unlock()
@@ -115,41 +123,47 @@ func (s *ConversationService) Ensure(ctx context.Context, appID string, req gate
 		Subject:    req.Subject,
 	})
 	if err != nil {
-		return Conversation{}, false, err
+		return gatewaydto.Conversation{}, false, err
 	}
 	return conversation, true, nil
 }
 
-func (s *ConversationService) Create(_ context.Context, req gatewaydto.CreateConversationRequest) (Conversation, error) {
+func (s *ConversationService) Create(_ context.Context, req gatewaydto.CreateConversationRequest) (gatewaydto.Conversation, error) {
+	if err := s.ensureConversations(); err != nil {
+		return gatewaydto.Conversation{}, err
+	}
 	if req.AppID == "" {
-		return Conversation{}, badRequest("appId is required")
+		return gatewaydto.Conversation{}, badRequest("appId is required")
 	}
 	if req.CustomerID == "" {
-		return Conversation{}, badRequest("customerId is required")
+		return gatewaydto.Conversation{}, badRequest("customerId is required")
 	}
 	app, err := s.apps.Get(context.Background(), req.AppID)
 	if err != nil {
-		return Conversation{}, err
+		return gatewaydto.Conversation{}, err
 	}
 	if app.Status != "active" {
-		return Conversation{}, badRequest("app %s is disabled", req.AppID)
+		return gatewaydto.Conversation{}, badRequest("app %s is disabled", req.AppID)
 	}
 	if _, err := s.customers.Get(context.Background(), req.CustomerID); err != nil {
-		return Conversation{}, err
+		return gatewaydto.Conversation{}, err
 	}
 	conversation := &Conversation{ConversationKey: "conv_" + idutil.GenShortId(), AppKey: req.AppID, CustomerKey: req.CustomerID, Channel: req.Channel, Subject: req.Subject, Status: "open"}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.conversationAccessor.Save(context.Background(), conversation); err != nil {
-		return Conversation{}, err
+		return gatewaydto.Conversation{}, err
 	}
 	s.conversations[conversation.ConversationKey] = conversation
-	result := *conversation
-	s.realtime.Publish("conversation.created", conversation.ConversationKey, result)
-	return result, nil
+	dto := conversationToDTO(conversation)
+	s.realtime.Publish("conversation.created", conversation.ConversationKey, dto)
+	return dto, nil
 }
 
 func (s *ConversationService) List(_ context.Context, appID, customerID, status string) []Conversation {
+	if err := s.ensureConversations(); err != nil {
+		return []Conversation{}
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	conversations := make([]Conversation, 0, len(s.conversations))
@@ -170,6 +184,9 @@ func (s *ConversationService) List(_ context.Context, appID, customerID, status 
 }
 
 func (s *ConversationService) ListForAdmin(ctx context.Context, principal Principal, filter ConversationFilter) (ConversationPage, error) {
+	if err := s.ensureConversations(); err != nil {
+		return ConversationPage{}, err
+	}
 	allowedApps := make(map[string]struct{})
 	appNames := make(map[string]string)
 	for _, app := range s.apps.List(ctx, principal) {
@@ -263,7 +280,7 @@ func (s *ConversationService) ListForAdmin(ctx context.Context, principal Princi
 			summary.CustomerName = customer.Name
 		}
 		if activity, ok := lastActivity[conversation.ConversationKey]; ok {
-			summary.UpdatedAt = activity.Format(time.RFC3339Nano)
+			summary.LastMessageAt = activity.Format(time.RFC3339Nano)
 		}
 		if s.messages != nil {
 			if message, err := s.messages.Latest(context.Background(), conversation.ConversationKey); err == nil {
@@ -279,21 +296,27 @@ func (s *ConversationService) ListForAdmin(ctx context.Context, principal Princi
 	return result, nil
 }
 
-func (s *ConversationService) Get(_ context.Context, id string) (Conversation, error) {
+func (s *ConversationService) Get(_ context.Context, id string) (gatewaydto.Conversation, error) {
+	if err := s.ensureConversations(); err != nil {
+		return gatewaydto.Conversation{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	conversation, ok := s.conversations[id]
 	if !ok {
-		return Conversation{}, notFound("conversation %s not found", id)
+		return gatewaydto.Conversation{}, notFound("conversation %s not found", id)
 	}
-	return *conversation, nil
+	return conversationToDTO(conversation), nil
 }
 
 func (s *ConversationService) AdminEventAllowed(principal Principal, event RealtimeEvent) bool {
+	if err := s.ensureConversations(); err != nil {
+		return false
+	}
 	if event.Type != "conversation.created" {
 		return false
 	}
-	conversation, ok := event.Data.(Conversation)
+	conversation, ok := event.Data.(gatewaydto.Conversation)
 	if !ok || principal.TenantID == "" {
 		return false
 	}
@@ -302,6 +325,9 @@ func (s *ConversationService) AdminEventAllowed(principal Principal, event Realt
 }
 
 func (s *ConversationService) MarkRead(ctx context.Context, id string) (int, error) {
+	if err := s.ensureConversations(); err != nil {
+		return 0, err
+	}
 	if _, err := s.Get(ctx, id); err != nil {
 		return 0, err
 	}
@@ -312,6 +338,9 @@ func (s *ConversationService) MarkRead(ctx context.Context, id string) (int, err
 }
 
 func (s *ConversationService) Assign(_ context.Context, id string, req gatewaydto.AssignConversationRequest) (Conversation, error) {
+	if err := s.ensureConversations(); err != nil {
+		return Conversation{}, err
+	}
 	if req.Assignee == "" {
 		return Conversation{}, badRequest("assignee is required")
 	}
@@ -331,11 +360,14 @@ func (s *ConversationService) Assign(_ context.Context, id string, req gatewaydt
 		return Conversation{}, err
 	}
 	result := *conversation
-	s.realtime.Publish("conversation.assigned", id, result)
+	s.realtime.Publish("conversation.assigned", id, conversationToDTO(&result))
 	return result, nil
 }
 
 func (s *ConversationService) Close(_ context.Context, id string, req gatewaydto.CloseConversationRequest) (Conversation, error) {
+	if err := s.ensureConversations(); err != nil {
+		return Conversation{}, err
+	}
 	now := time.Now().UTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -356,11 +388,17 @@ func (s *ConversationService) Close(_ context.Context, id string, req gatewaydto
 		return Conversation{}, err
 	}
 	result := *conversation
-	s.realtime.Publish("conversation.closed", id, result)
+	s.realtime.Publish("conversation.closed", id, conversationToDTO(&result))
 	return result, nil
 }
 
 func (s *ConversationService) Forward(_ context.Context, id string, req gatewaydto.ForwardConversationRequest) (Delivery, error) {
+	if err := s.ensureConversations(); err != nil {
+		return Delivery{}, err
+	}
+	if err := s.ensureDeliveries(); err != nil {
+		return Delivery{}, err
+	}
 	if req.ChannelID == "" {
 		return Delivery{}, badRequest("channelId is required")
 	}
@@ -399,11 +437,14 @@ func (s *ConversationService) Forward(_ context.Context, id string, req gatewayd
 		return Delivery{}, err
 	}
 	result := *delivery
-	s.realtime.Publish("conversation.forwarded", id, result)
+	s.realtime.Publish("conversation.forwarded", id, conversationToDTO(conversation))
 	return result, nil
 }
 
 func (s *ConversationService) Deliveries(_ context.Context, conversationID string) []Delivery {
+	if err := s.ensureDeliveries(); err != nil {
+		return []Delivery{}
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	deliveries := make([]Delivery, 0, len(s.deliveries))
@@ -418,6 +459,9 @@ func (s *ConversationService) Deliveries(_ context.Context, conversationID strin
 }
 
 func (s *ConversationService) DeliveryStatsByChannel() map[string]DeliveryStats {
+	if err := s.ensureDeliveries(); err != nil {
+		return map[string]DeliveryStats{}
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -443,6 +487,9 @@ func (s *ConversationService) DeliveryStatsByChannel() map[string]DeliveryStats 
 }
 
 func (s *ConversationService) ConversationCountByApp() map[string]int {
+	if err := s.ensureConversations(); err != nil {
+		return map[string]int{}
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -454,6 +501,9 @@ func (s *ConversationService) ConversationCountByApp() map[string]int {
 }
 
 func (s *ConversationService) RetargetCustomer(sourceID, targetID string) error {
+	if err := s.ensureConversations(); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -471,6 +521,27 @@ func (s *ConversationService) RetargetCustomer(sourceID, targetID string) error 
 }
 
 func (s *ConversationService) Load() error {
+	if err := s.ensureConversations(); err != nil {
+		return err
+	}
+	return s.ensureDeliveries()
+}
+
+func (s *ConversationService) ensureConversations() error {
+	s.conversationOnce.Do(func() {
+		s.conversationErr = s.loadConversations()
+	})
+	return s.conversationErr
+}
+
+func (s *ConversationService) ensureDeliveries() error {
+	s.deliveryOnce.Do(func() {
+		s.deliveryErr = s.loadDeliveries()
+	})
+	return s.deliveryErr
+}
+
+func (s *ConversationService) loadConversations() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	conversations, err := s.conversationAccessor.List(context.Background())
@@ -480,6 +551,12 @@ func (s *ConversationService) Load() error {
 	for _, conversation := range conversations {
 		s.conversations[conversation.ConversationKey] = conversation
 	}
+	return nil
+}
+
+func (s *ConversationService) loadDeliveries() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	deliveries, err := s.deliveryAccessor.List(context.Background())
 	if err != nil {
 		return err

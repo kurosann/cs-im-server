@@ -47,7 +47,7 @@ func (bridge) RecentMessages(ctx context.Context, conversationID string, limit i
 	for _, message := range messages {
 		out = append(out, relayservice.TranscriptMessage{
 			ID:   message.MessageKey,
-			Role: message.SenderRole,
+			Role: message.Sender.Role,
 			Type: message.Type,
 			Text: message.Text,
 			Seq:  message.Seq,

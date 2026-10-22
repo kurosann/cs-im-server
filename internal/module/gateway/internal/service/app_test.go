@@ -49,7 +49,7 @@ func staffPrincipal(tenantID string) Principal {
 	}
 }
 
-func registerApp(t *testing.T, service *AppService, tenantID, serviceKey, name string) App {
+func registerApp(t *testing.T, service *AppService, tenantID, serviceKey, name string) gatewaydto.App {
 	t.Helper()
 	app, err := service.Register(context.Background(), staffPrincipal(tenantID), gatewaydto.RegisterAppRequest{
 		ServiceKey:  serviceKey,
