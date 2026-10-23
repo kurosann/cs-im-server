@@ -415,9 +415,6 @@ func (s *MessageService) LastReceivedActivity(_ context.Context, conversationID 
 		if message.ConversationKey != conversationID {
 			continue
 		}
-		if message.SenderRole != "customer" {
-			continue
-		}
 		if createdAt := message.CreatedAt(); createdAt.After(latest) {
 			latest = createdAt
 		}

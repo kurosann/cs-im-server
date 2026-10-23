@@ -392,6 +392,32 @@ func (s *ConversationService) Close(_ context.Context, id string, req gatewaydto
 	return result, nil
 }
 
+func (s *ConversationService) Reopen(_ context.Context, id string) (Conversation, error) {
+	if err := s.ensureConversations(); err != nil {
+		return Conversation{}, err
+	}
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	conversation, ok := s.conversations[id]
+	if !ok {
+		return Conversation{}, notFound("conversation %s not found", id)
+	}
+	if conversation.Status == "open" {
+		return *conversation, nil
+	}
+	conversation.Status = "open"
+	conversation.UpdateAt = now
+	conversation.ClosedAt = nil
+	conversation.CloseReason = ""
+	if err := s.conversationAccessor.Save(context.Background(), conversation); err != nil {
+		return Conversation{}, err
+	}
+	result := *conversation
+	s.realtime.Publish("conversation.reopened", id, conversationToDTO(&result))
+	return result, nil
+}
+
 func (s *ConversationService) Forward(_ context.Context, id string, req gatewaydto.ForwardConversationRequest) (Delivery, error) {
 	if err := s.ensureConversations(); err != nil {
 		return Delivery{}, err

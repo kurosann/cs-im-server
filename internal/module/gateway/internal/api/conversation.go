@@ -120,6 +120,15 @@ func (a *ConversationAPI) MarkRead(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", markedCount)
 }
 
+func (a *ConversationAPI) Reopen(ctx httpapi.Context) {
+	conversation, err := a.Service.Reopen(ctx.Context(), ctx.Param("id"))
+	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", conversation)
+}
+
 func (a *ConversationAPI) AdminRoutes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/conversations")
 	routes.Post("", a.Create)
@@ -127,6 +136,7 @@ func (a *ConversationAPI) AdminRoutes() commonmodule.HttpRouteGroup {
 	routes.Get("/:id", a.Get)
 	routes.Post("/:id/assign", a.Assign)
 	routes.Post("/:id/close", a.Close)
+	routes.Post("/:id/reopen", a.Reopen)
 	routes.Post("/:id/forward", a.Forward)
 	routes.Post("/:id/read", a.MarkRead)
 	routes.Get("/:id/deliveries", a.Deliveries)
