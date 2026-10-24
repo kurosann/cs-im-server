@@ -56,19 +56,22 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	roleAPI := api.NewRoleAPI(m.roles)
 	adminGroup := commonmodule.NewHttpRouteGroup("/admin/v1/iam", commonmodule.WithGroupMiddlewares(
 		iamhttp.AccountTokenMiddleware(m.accounts),
+		iamhttp.RequirePrincipalKind(iam.PrincipalKindHuman),
 		iamhttp.RequirePrincipalScope(iam.ScopeIAMTokenManage),
 	)).Compose(tokenAPI.AdminRoutes(), channelCredentialAPI.Routes(), staffAPI.Routes())
 	roleGroup := commonmodule.NewHttpRouteGroup("/admin/v1/iam", commonmodule.WithGroupMiddlewares(
 		iamhttp.AccountTokenMiddleware(m.accounts),
+		iamhttp.RequirePrincipalKind(iam.PrincipalKindHuman),
 		iamhttp.RequirePrincipalScope(iam.ScopeIAMRoleManage),
 	)).Compose(roleAPI.Routes())
 	auditAPI := api.NewAuditAPI(m.audit)
 	auditGroup := commonmodule.NewHttpRouteGroup("/admin/v1/iam", commonmodule.WithGroupMiddlewares(
 		iamhttp.AccountTokenMiddleware(m.accounts),
+		iamhttp.RequirePrincipalKind(iam.PrincipalKindHuman),
 		iamhttp.RequirePrincipalScope(iam.ScopeAuditRead),
 	)).Compose(auditAPI.Routes())
 
 	return commonmodule.HttpApiInfo{
-		Handlers: append(authAPI.Routes(), adminGroup.Merge(roleGroup, auditGroup)...),
+		Handlers: append(append(authAPI.ManagementRoutes(), authAPI.ForwardingRoutes()...), adminGroup.Merge(roleGroup, auditGroup)...),
 	}
 }

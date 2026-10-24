@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"cs-im-server/internal/module/gateway/internal/model"
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
 	"cs-im-server/pkg/consts"
 	"vane-common/pkg/safe"
 	"vane-common/publish"
@@ -116,21 +116,27 @@ func decodeRealtimeEvent(payload []byte) (RealtimeEvent, error) {
 
 func decodeRealtimeEventData(eventType string, payload []byte) (any, error) {
 	switch eventType {
-	case "message.created", "message.status_changed":
-		var item model.Message
+	case "message.status_changed":
+		var item gatewaydto.Message
 		return item, json.Unmarshal(payload, &item)
+	case "message.created":
+		var item gatewaydto.Message
+		return item, json.Unmarshal(payload, &item)
+	case "message.created_batch":
+		var items []gatewaydto.Message
+		return items, json.Unmarshal(payload, &items)
 	case
 		"conversation.created",
 		"conversation.assigned",
 		"conversation.closed",
 		"conversation.forwarded":
-		var item model.Conversation
+		var item gatewaydto.Conversation
 		return item, json.Unmarshal(payload, &item)
 	case
 		"customer.created",
 		"customer.identity_added",
 		"customer.merged":
-		var item model.Customer
+		var item gatewaydto.Customer
 		return item, json.Unmarshal(payload, &item)
 	default:
 		var item any

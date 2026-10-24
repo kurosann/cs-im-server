@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"cs-im-server/internal/module/iam/internal/service"
-	pkg "cs-im-server/internal/module/iam/pkg/iam"
+	iamprincipal "cs-im-server/internal/module/iam/pkg/principal"
 	"cs-im-server/pkg/httpapi"
 
 	commonmodule "vane-common/module"
@@ -35,10 +35,10 @@ func (a *RoleAPI) Routes() commonmodule.HttpRouteGroup {
 	return routes
 }
 
-func (a *RoleAPI) principal(ctx httpapi.Context) (pkg.Principal, bool) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+func (a *RoleAPI) principal(ctx httpapi.Context) (iamprincipal.Principal, bool) {
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 	}
 	return principal, ok
 }

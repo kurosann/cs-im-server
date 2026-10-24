@@ -9,6 +9,7 @@ import (
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	"cs-im-server/pkg/grpcapi"
 	gatewayv1 "github.com/kurosann/cs-im-sdk/gateway/v1"
+	logger "vane-common/pkg/logger"
 )
 
 type ChannelGatewayGRPCAPI struct {
@@ -85,6 +86,7 @@ func contentFromRequest(item *gatewayv1.MessageContent) *gatewaydto.MessageMedia
 }
 
 func (a *ChannelGatewayGRPCAPI) EnsureConversation(ctx context.Context, req *gatewayv1.EnsureConversationRequest) (*gatewayv1.ConversationResponse, error) {
+	logger.Debugf(ctx, "channel grpc: ensure conversation appID=%s channel=%s", req.AppId, req.Channel)
 	if err := a.authorize(ctx, req.AppId); err != nil {
 		return nil, err
 	}
@@ -101,6 +103,7 @@ func (a *ChannelGatewayGRPCAPI) EnsureConversation(ctx context.Context, req *gat
 }
 
 func (a *ChannelGatewayGRPCAPI) GetConversation(ctx context.Context, req *gatewayv1.GetConversationRequest) (*gatewayv1.ConversationResponse, error) {
+	logger.Debugf(ctx, "channel grpc: get conversation appID=%s conversationID=%s", req.AppId, req.ConversationId)
 	if err := a.authorize(ctx, req.AppId); err != nil {
 		return nil, err
 	}
@@ -121,12 +124,12 @@ func (a *ChannelGatewayGRPCAPI) messageFromService(item gatewaydto.Message) *gat
 		Seq:            item.Seq,
 		ConversationId: item.ConversationKey,
 		CustomerId:     item.CustomerKey,
-		Sender:         &gatewayv1.MessageSender{Role: item.Sender.Role, Id: item.Sender.ID},
+		Sender:         &gatewayv1.MessageSender{Role: string(item.Sender.Role), Id: item.Sender.ID},
 		Source:         source,
-		Type:           item.Type,
+		Type:           string(item.Type),
 		Text:           item.Text,
 		Content:        contentFromService(item.Content),
-		Status:         item.Status,
+		Status:         string(item.Status),
 		ReceivedAt:     item.ReceivedAt,
 		CreatedAt:      item.CreatedAt,
 		UpdatedAt:      item.UpdatedAt,
@@ -134,14 +137,15 @@ func (a *ChannelGatewayGRPCAPI) messageFromService(item gatewaydto.Message) *gat
 }
 
 func (a *ChannelGatewayGRPCAPI) SendMessage(ctx context.Context, req *gatewayv1.SendMessageRequest) (*gatewayv1.MessageResponse, error) {
+	logger.Debugf(ctx, "channel grpc: send message appID=%s conversationID=%s type=%s", req.AppId, req.ConversationId, req.Type)
 	if err := a.authorize(ctx, req.AppId); err != nil {
 		return nil, err
 	}
 	request := gatewaydto.CreateMessageRequest{
 		ConversationKey: req.ConversationId,
 		CustomerID:      req.CustomerId,
-		Sender:          gatewaydto.MessageSender{Role: req.Sender.GetRole(), ID: req.Sender.GetId()},
-		Type:            req.Type,
+		Sender:          gatewaydto.MessageSender{Role: gatewaydto.MessageSenderRole(req.Sender.GetRole()), ID: req.Sender.GetId()},
+		Type:            gatewaydto.MessageType(req.Type),
 		Text:            req.Text,
 		Content:         contentFromRequest(req.Content),
 	}
@@ -163,6 +167,7 @@ func (a *ChannelGatewayGRPCAPI) SendMessage(ctx context.Context, req *gatewayv1.
 }
 
 func (a *ChannelGatewayGRPCAPI) ListMessages(ctx context.Context, req *gatewayv1.ListMessagesRequest) (*gatewayv1.ListMessagesResponse, error) {
+	logger.Debugf(ctx, "channel grpc: list messages appID=%s conversationID=%s afterSeq=%d beforeSeq=%d limit=%d order=%s", req.AppId, req.ConversationId, req.AfterSeq, req.BeforeSeq, req.Limit, req.Order)
 	if err := a.authorize(ctx, req.AppId); err != nil {
 		return nil, err
 	}
@@ -188,6 +193,7 @@ func (a *ChannelGatewayGRPCAPI) ListMessages(ctx context.Context, req *gatewayv1
 }
 
 func (a *ChannelGatewayGRPCAPI) StreamMessages(req *gatewayv1.StreamMessagesRequest, stream gatewayv1.ChannelGatewayService_StreamMessagesServer) error {
+	logger.Debugf(stream.Context(), "channel grpc: stream messages appID=%s", req.AppId)
 	if err := a.authorize(stream.Context(), req.AppId); err != nil {
 		return err
 	}

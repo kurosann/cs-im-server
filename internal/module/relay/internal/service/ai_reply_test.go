@@ -168,8 +168,8 @@ func TestInboundUsesBindingAndSkipsPausedDefault(t *testing.T) {
 		`{"action":"reply","replyText":"预计 1-2 个工作日到账","reasonCode":"prompt_supported","reason":"知识库说明了退款到账时间"}`,
 	}}
 	gateway := &fakeInbound{ref: ConversationRef{AppID: "app_wa", CustomerID: "cus_1", Subject: "退款"}}
-	service.SetCompletionClient(client)
-	service.SetInboundGateway(gateway)
+	service.completer = client
+	service.inbound = gateway
 	if err := service.HandleInboundBatch(ctx, []InboundMessage{
 		{ID: "msg_ai_loop", ConversationID: "conv_1", Role: "ai", Type: "text", Text: "不要再次处理"},
 		{ID: "msg_customer", ConversationID: "conv_1", Role: "customer", Type: "text", Text: "退款多久到账？"},

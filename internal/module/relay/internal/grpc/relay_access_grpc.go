@@ -43,12 +43,12 @@ func relayMessageToProto(item gatewaydto.Message) *relayv1.RelayMessage {
 		ConversationId: item.ConversationKey,
 		CustomerId:     item.CustomerKey,
 		Sender: &relayv1.RelayMessageSender{
-			Role: item.Sender.Role,
+			Role: string(item.Sender.Role),
 			Id:   item.Sender.ID,
 		},
-		Type:       item.Type,
+		Type:       string(item.Type),
 		Text:       item.Text,
-		Status:     item.Status,
+		Status:     string(item.Status),
 		ReceivedAt: item.ReceivedAt,
 		CreatedAt:  item.CreatedAt,
 		UpdatedAt:  item.UpdatedAt,
@@ -76,8 +76,8 @@ func relayMessageFromRequest(req *relayv1.SendRelayMessageRequest) gatewaydto.Cr
 	request := gatewaydto.CreateMessageRequest{
 		ConversationKey: req.GetConversationId(),
 		CustomerID:      req.GetCustomerId(),
-		Sender:          gatewaydto.MessageSender{Role: req.GetSender().GetRole(), ID: req.GetSender().GetId()},
-		Type:            req.GetType(),
+		Sender:          gatewaydto.MessageSender{Role: gatewaydto.MessageSenderRole(req.GetSender().GetRole()), ID: req.GetSender().GetId()},
+		Type:            gatewaydto.MessageType(req.GetType()),
 		Text:            req.GetText(),
 	}
 	if item := req.GetContent(); item != nil {

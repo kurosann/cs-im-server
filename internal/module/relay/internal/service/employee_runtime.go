@@ -45,16 +45,6 @@ type inboundBatch struct {
 	timer *time.Timer
 }
 
-func (s *RelayService) SetInboundGateway(gateway InboundGateway) {
-	s.inboundMu.Lock()
-	s.inbound = gateway
-	s.inboundMu.Unlock()
-}
-
-func (s *RelayService) SetCompletionClient(client CompletionClient) {
-	s.completer = client
-}
-
 func (s *RelayService) EnqueueInbound(message InboundMessage) {
 	message.Role = strings.TrimSpace(message.Role)
 	message.ConversationID = strings.TrimSpace(message.ConversationID)
@@ -160,8 +150,6 @@ func (s *RelayService) HandleInboundBatch(ctx context.Context, messages []Inboun
 }
 
 func (s *RelayService) inboundGateway() InboundGateway {
-	s.inboundMu.Lock()
-	defer s.inboundMu.Unlock()
 	return s.inbound
 }
 

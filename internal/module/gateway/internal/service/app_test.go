@@ -7,6 +7,7 @@ import (
 
 	gatewaymodel "cs-im-server/internal/module/gateway/internal/model"
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
+	iamprincipal "cs-im-server/internal/module/iam/pkg/principal"
 
 	"vane-common/pkg/dataaccess"
 	"vane-common/pkg/dataaccess/store"
@@ -27,12 +28,12 @@ func setupAppService(t *testing.T) *AppService {
 	}
 
 	service := NewAppService(NewRealtimeService())
-	service.accessor = dataaccess.DataAccessor[*App]{}
+	service.accessor = dataaccess.DataAccessor[*gatewaymodel.App]{}
 	return service
 }
 
-func businessPrincipal(tenantID string) Principal {
-	return Principal{
+func businessPrincipal(tenantID string) iamprincipal.Principal {
+	return iamprincipal.Principal{
 		AccountKey: "account_" + tenantID,
 		TenantID:   tenantID,
 		Kind:       iampkg.PrincipalKindBusiness,
@@ -40,8 +41,8 @@ func businessPrincipal(tenantID string) Principal {
 	}
 }
 
-func staffPrincipal(tenantID string) Principal {
-	return Principal{
+func staffPrincipal(tenantID string) iamprincipal.Principal {
+	return iamprincipal.Principal{
 		AccountKey: "staff_" + tenantID,
 		TenantID:   tenantID,
 		Kind:       iampkg.PrincipalKindHuman,
@@ -81,7 +82,7 @@ func TestAppServiceTenantBoundary(t *testing.T) {
 	if _, err := service.GetAuthorized(context.Background(), principal1, tenant2App.AppKey); err == nil {
 		t.Fatal("GetAuthorized() allowed other tenant app")
 	}
-	if _, err := service.Heartbeat(context.Background(), principal1, gatewaydto.HeartbeatRequest{AppID: tenant2App.AppKey}); err == nil {
+	if _, err := service.Heartbeat(context.Background(), businessPrincipal("tenant_1"), gatewaydto.HeartbeatRequest{AppID: tenant2App.AppKey}); err == nil {
 		t.Fatal("Heartbeat() allowed other tenant app")
 	}
 	if _, err := service.SetStatus(context.Background(), principal1, tenant2App.AppKey, false); err == nil {
@@ -93,7 +94,7 @@ func TestAppServiceRequiresChannelScope(t *testing.T) {
 	service := setupAppService(t)
 	app := registerApp(t, service, "tenant_1", "web", "官网客服")
 
-	missingScope := Principal{
+	missingScope := iamprincipal.Principal{
 		AccountKey: "account_tenant_1",
 		TenantID:   "tenant_1",
 		Kind:       iampkg.PrincipalKindBusiness,
@@ -102,7 +103,7 @@ func TestAppServiceRequiresChannelScope(t *testing.T) {
 		t.Fatal("AuthorizeAccount() allowed principal without channel scope")
 	}
 
-	relay := Principal{
+	relay := iamprincipal.Principal{
 		AccountKey: "relay_tenant_1",
 		TenantID:   "tenant_1",
 		Kind:       iampkg.PrincipalKindRelay,

@@ -4,9 +4,10 @@ import (
 	"time"
 
 	gatewaydto "cs-im-server/internal/module/gateway/dto"
+	"cs-im-server/internal/module/gateway/internal/model"
 )
 
-func appToDTO(app *App) gatewaydto.App {
+func appToDTO(app *model.App) gatewaydto.App {
 	return gatewaydto.App{
 		AppKey:          app.AppKey,
 		TenantID:        app.TenantID,
@@ -22,7 +23,7 @@ func appToDTO(app *App) gatewaydto.App {
 	}
 }
 
-func customerToDTO(customer *Customer) gatewaydto.Customer {
+func customerToDTO(customer *model.Customer) gatewaydto.Customer {
 	identities := make([]gatewaydto.CustomerIdentity, 0, len(customer.Identities))
 	for _, identity := range customer.Identities {
 		identities = append(identities, gatewaydto.CustomerIdentity{
@@ -43,7 +44,7 @@ func customerToDTO(customer *Customer) gatewaydto.Customer {
 	}
 }
 
-func conversationToDTO(conversation *Conversation) gatewaydto.Conversation {
+func conversationToDTO(conversation *model.Conversation) gatewaydto.Conversation {
 	return gatewaydto.Conversation{
 		ConversationKey: conversation.ConversationKey,
 		AppKey:          conversation.AppKey,
@@ -55,13 +56,14 @@ func conversationToDTO(conversation *Conversation) gatewaydto.Conversation {
 		ForwardedTo:     conversation.ForwardedTo,
 		CloseReason:     conversation.CloseReason,
 		ClosedAt:        conversation.ClosedAt,
+		Metadata:        conversation.Metadata,
 		ReceivedAt:      conversation.BaseModel.CreateAt.Format(time.RFC3339Nano),
 		CreatedAt:       conversation.BaseModel.CreateAt.Format(time.RFC3339Nano),
 		UpdatedAt:       conversation.BaseModel.UpdateAt.Format(time.RFC3339Nano),
 	}
 }
 
-func messageToDTO(message *Message) gatewaydto.Message {
+func messageToDTO(message *model.Message) gatewaydto.Message {
 	var source *gatewaydto.MessageSource
 	if message.SourceAppKey != "" || message.SourceExternalID != "" {
 		source = &gatewaydto.MessageSource{
@@ -89,30 +91,30 @@ func messageToDTO(message *Message) gatewaydto.Message {
 		Seq:             message.Seq,
 		ConversationKey: message.ConversationKey,
 		CustomerKey:     message.CustomerKey,
-		Sender:          gatewaydto.MessageSender{Role: message.SenderRole, ID: message.SenderID},
+		Sender:          gatewaydto.MessageSender{Role: gatewaydto.MessageSenderRole(message.SenderRole), ID: message.SenderID},
 		Source:          source,
-		Type:            message.Type,
+		Type:            gatewaydto.MessageType(message.Type),
 		Text:            message.Text,
 		Content:         content,
-		Status:          message.Status,
+		Status:          gatewaydto.MessageStatus(message.Status),
 		ReceivedAt:      message.CreatedAt().Format(time.RFC3339Nano),
 		CreatedAt:       message.CreatedAt().Format(time.RFC3339Nano),
 		UpdatedAt:       message.BaseModel.UpdateAt.Format(time.RFC3339Nano),
 	}
 }
 
-func messageToDTOResult(message Message, err error) (gatewaydto.Message, error) {
+func messageToDTOResult(message model.Message, err error) (gatewaydto.Message, error) {
 	if err != nil {
 		return gatewaydto.Message{}, err
 	}
 	return messageToDTO(&message), nil
 }
 
-func messageMediaToModel(item *gatewaydto.MessageMedia) *MessageMedia {
+func messageMediaToModel(item *gatewaydto.MessageMedia) *model.MessageMedia {
 	if item == nil {
 		return nil
 	}
-	return &MessageMedia{
+	return &model.MessageMedia{
 		URL:             item.URL,
 		MimeType:        item.MimeType,
 		FileName:        item.FileName,

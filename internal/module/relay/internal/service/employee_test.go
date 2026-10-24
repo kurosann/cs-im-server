@@ -22,7 +22,7 @@ func setupEmployees(t *testing.T) *RelayService {
 	if err := db.AutoMigrate(&Channel{}, &AIEmployee{}, &AIEmployeeBinding{}, &AIEmployeeExecution{}, &businessAppRow{}, &KnowledgeGroup{}, &KnowledgeBase{}, &KnowledgeDoc{}, &iamUserRow{}); err != nil {
 		t.Fatalf("migrate sqlite: %v", err)
 	}
-	return NewRelayService(realtimePublisherStub{})
+	return NewRelayService(RuntimeDeps{Realtime: realtimePublisherStub{}})
 }
 
 type realtimePublisherStub struct{}

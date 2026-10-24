@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"cs-im-server/internal/module/iam/internal/service"
-	pkg "cs-im-server/internal/module/iam/pkg/iam"
+	iamprincipal "cs-im-server/internal/module/iam/pkg/principal"
 	"cs-im-server/pkg/httpapi"
 
 	commonmodule "vane-common/module"
@@ -46,9 +46,9 @@ func (a *StaffAPI) Routes() commonmodule.HttpRouteGroup {
 }
 
 func (a *StaffAPI) Update(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	var req StaffUpdateRequest
@@ -65,9 +65,9 @@ func (a *StaffAPI) Update(ctx httpapi.Context) {
 }
 
 func (a *StaffAPI) List(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	items, err := a.Staff.List(ctx.Context(), principal)
@@ -79,9 +79,9 @@ func (a *StaffAPI) List(ctx httpapi.Context) {
 }
 
 func (a *StaffAPI) Create(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	var req iamdto.CreateStaffRequest
@@ -98,9 +98,9 @@ func (a *StaffAPI) Create(ctx httpapi.Context) {
 }
 
 func (a *StaffAPI) SetRole(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	var req StaffRoleRequest
@@ -117,9 +117,9 @@ func (a *StaffAPI) SetRole(ctx httpapi.Context) {
 }
 
 func (a *StaffAPI) SetStatus(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	var req StaffStatusRequest
@@ -136,9 +136,9 @@ func (a *StaffAPI) SetStatus(ctx httpapi.Context) {
 }
 
 func (a *StaffAPI) ResetPassword(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	result, err := a.Staff.ResetPassword(ctx.Context(), principal, ctx.Param("userKey"))
@@ -150,9 +150,9 @@ func (a *StaffAPI) ResetPassword(ctx httpapi.Context) {
 }
 
 func (a *StaffAPI) ForceLogout(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	if err := a.Staff.ForceLogout(ctx.Context(), principal, ctx.Param("userKey")); err != nil {

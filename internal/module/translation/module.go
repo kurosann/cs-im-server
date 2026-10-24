@@ -44,12 +44,11 @@ func (m *Module) Task() []commonmodule.TaskRegInfo { return nil }
 
 func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	providerAPI := translationhttp.NewProviderAPI(m.providers)
-	userGroup := commonmodule.NewHttpRouteGroup("/api/v1/translations").Compose(providerAPI.Routes())
 	adminGroup := commonmodule.NewHttpRouteGroup("/admin/v1/translation", commonmodule.WithGroupMiddlewares(
 		iamhttp.AccountTokenMiddleware(iampkg.Service()),
 		iamhttp.RequirePrincipalScope(iampkg.ScopeGatewayAdmin),
-	)).Compose(providerAPI.AdminRoutes())
+	)).Compose(providerAPI.Routes(), providerAPI.AdminRoutes())
 	return commonmodule.HttpApiInfo{
-		Handlers: userGroup.Merge(adminGroup),
+		Handlers: adminGroup.Handlers(),
 	}
 }

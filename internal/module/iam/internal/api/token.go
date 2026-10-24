@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"cs-im-server/internal/module/iam/internal/service"
-	pkg "cs-im-server/internal/module/iam/pkg/iam"
+	iamprincipal "cs-im-server/internal/module/iam/pkg/principal"
 	"cs-im-server/pkg/httpapi"
 
 	commonmodule "vane-common/module"
@@ -31,9 +31,9 @@ func (a *TokenAPI) AdminRoutes() commonmodule.HttpRouteGroup {
 }
 
 func (a *TokenAPI) Issue(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	var req iamdto.IssueAccountTokenRequest
@@ -50,9 +50,9 @@ func (a *TokenAPI) Issue(ctx httpapi.Context) {
 }
 
 func (a *TokenAPI) List(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	items, err := a.Accounts.List(ctx.Context(), principal)
@@ -64,9 +64,9 @@ func (a *TokenAPI) List(ctx httpapi.Context) {
 }
 
 func (a *TokenAPI) Get(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	item, err := a.Accounts.Get(ctx.Context(), principal, ctx.Param("tokenKey"))
@@ -86,9 +86,9 @@ func (a *TokenAPI) Enable(ctx httpapi.Context) {
 }
 
 func (a *TokenAPI) Rotate(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	result, err := a.Accounts.Rotate(ctx.Context(), principal, ctx.Param("tokenKey"))
@@ -100,9 +100,9 @@ func (a *TokenAPI) Rotate(ctx httpapi.Context) {
 }
 
 func (a *TokenAPI) setStatus(ctx httpapi.Context, status string) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	item, err := a.Accounts.SetStatus(ctx.Context(), principal, ctx.Param("tokenKey"), status)

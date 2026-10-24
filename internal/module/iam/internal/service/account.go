@@ -29,6 +29,8 @@ const (
 	ScopeConversationManage = "conversation:manage"
 	ScopeMessageSendAgent   = "message:send:agent"
 	ScopeAuditRead          = "audit:read"
+
+	forwardingSessionTTL = 24 * time.Hour
 )
 
 type AccountService struct {
@@ -156,6 +158,43 @@ func (s *AccountService) authenticateStaff(ctx context.Context, item *model.Acco
 
 func (s *AccountService) RoleScopes(ctx context.Context, tenantID, role string) ([]string, error) {
 	return s.roleScopes(ctx, tenantID, role)
+}
+
+func (s *AccountService) IssueForwardingSession(ctx context.Context, token string) (iamdto.IssueAccountTokenResult, error) {
+	if strings.TrimSpace(token) == "" {
+		return iamdto.IssueAccountTokenResult{}, badRequest("token is required")
+	}
+	principal, err := s.Authenticate(ctx, token)
+	if err != nil {
+		return iamdto.IssueAccountTokenResult{}, err
+	}
+	if !principal.HasKind(iamprincipal.KindRelay) || !principal.HasScope(ScopeRelayAccess) {
+		return iamdto.IssueAccountTokenResult{}, forbidden("forwarding identity is required")
+	}
+	secret, err := generateToken("csim")
+	if err != nil {
+		return iamdto.IssueAccountTokenResult{}, err
+	}
+	tokenKey, err := generateTokenKey()
+	if err != nil {
+		return iamdto.IssueAccountTokenResult{}, err
+	}
+	expiresAt := time.Now().Add(forwardingSessionTTL)
+	item := &model.AccountToken{
+		TokenKey:   tokenKey,
+		AccountKey: principal.AccountKey,
+		Name:       principal.Name,
+		TenantID:   principal.TenantID,
+		Kind:       iamprincipal.KindRelay,
+		ScopesJSON: `["relay:access"]`,
+		TokenHash:  hashToken(secret),
+		Status:     "active",
+		ExpiresAt:  &expiresAt,
+	}
+	if err := s.accessor.Create(ctx, item); err != nil {
+		return iamdto.IssueAccountTokenResult{}, err
+	}
+	return iamdto.IssueAccountTokenResult{Token: tokenInfo(item), Secret: secret}, nil
 }
 
 func (s *AccountService) roleScopes(ctx context.Context, tenantID, role string) ([]string, error) {

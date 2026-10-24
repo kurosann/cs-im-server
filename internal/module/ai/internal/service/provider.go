@@ -15,7 +15,6 @@ import (
 
 	aidto "cs-im-server/internal/module/ai/dto"
 	"cs-im-server/internal/module/ai/internal/model"
-	aipkg "cs-im-server/internal/module/ai/pkg/ai"
 
 	"cs-im-server/pkg/apperr"
 	"vane-common/pkg/dataaccess"
@@ -109,7 +108,7 @@ func (s *ProviderService) Load() error {
 	if err != nil {
 		return err
 	}
-	aipkg.SetService(s)
+	SetGlobalService(s)
 	_ = providers
 	return nil
 }

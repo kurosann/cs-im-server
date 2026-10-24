@@ -2,11 +2,12 @@ package runtime
 
 import (
 	"context"
-	gatewaydto "cs-im-server/internal/module/gateway/dto"
-	"cs-im-server/internal/module/gateway/internal/model"
 	"sync"
 
+	gatewaydto "cs-im-server/internal/module/gateway/dto"
+	"cs-im-server/internal/module/gateway/internal/model"
 	"cs-im-server/internal/module/gateway/internal/service"
+
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 )
 
@@ -27,7 +28,9 @@ type MessageIngress interface {
 	CreateChannelMessage(ctx context.Context, appID string, req gatewaydto.CreateMessageRequest) (gatewaydto.Message, error)
 	CreateChannelMessages(ctx context.Context, appID string, req gatewaydto.BatchCreateMessagesRequest) (gatewaydto.BatchCreateMessagesResult, error)
 	History(ctx context.Context, appID, conversationID string, filter gatewaydto.MessageHistoryFilter) (gatewaydto.MessageHistoryPage, error)
+	UpdateChannelMessageStatus(ctx context.Context, appID, messageID string, req gatewaydto.UpdateMessageStatusRequest) (gatewaydto.Message, error)
 	Offset(ctx context.Context, appID, conversationID string) (gatewaydto.MessageOffset, error)
+	PendingHistoryRequest(ctx context.Context, appID string) (gatewaydto.HistoryRequest, bool, error)
 	ChannelEventAllowed(appID string, event service.RealtimeEvent) bool
 }
 
@@ -36,6 +39,8 @@ type MessageEgress interface {
 	CreateAIReply(ctx context.Context, conversationID, employeeID, text string) (gatewaydto.Message, error)
 	RecentMessages(ctx context.Context, conversationID string, limit int) ([]gatewaydto.Message, error)
 	RelayHistory(ctx context.Context, conversationID string, filter gatewaydto.MessageHistoryFilter) (gatewaydto.MessageHistoryPage, error)
+	CompleteHistoryRequest(ctx context.Context, appID string, req gatewaydto.CompleteHistoryRequestInput) (gatewaydto.HistoryRequest, error)
+	FailHistoryRequest(ctx context.Context, appID string, req gatewaydto.CompleteHistoryRequestInput) (gatewaydto.HistoryRequest, error)
 	RelayEventAllowed(event service.RealtimeEvent) bool
 }
 

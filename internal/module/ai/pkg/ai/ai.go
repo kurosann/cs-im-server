@@ -2,13 +2,10 @@ package ai
 
 import (
 	"context"
-	"sync"
 
 	aidto "cs-im-server/internal/module/ai/dto"
+	service "cs-im-server/internal/module/ai/internal/service"
 )
-
-var serviceMu sync.RWMutex
-var providerService AIService
 
 type AIService interface {
 	Generate(ctx context.Context, req GenerateRequest) (GenerateResult, error)
@@ -16,18 +13,11 @@ type AIService interface {
 }
 
 func SetService(next AIService) {
-	serviceMu.Lock()
-	defer serviceMu.Unlock()
-	providerService = next
+	service.SetGlobalService(next)
 }
 
 func Service() AIService {
-	serviceMu.RLock()
-	defer serviceMu.RUnlock()
-	if providerService == nil {
-		return nil
-	}
-	return providerService
+	return service.GlobalService()
 }
 
 type GenerateRequest = aidto.GenerateRequest

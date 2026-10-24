@@ -1,7 +1,5 @@
 package relay
 
-import "sync"
-
 import (
 	relaydto "cs-im-server/internal/module/relay/dto"
 	model "cs-im-server/internal/module/relay/internal/model"
@@ -21,20 +19,10 @@ type (
 	UpdateWebhookRequest = relaydto.UpdateWebhookRequest
 )
 
-var serviceMu sync.RWMutex
-var relayService *RelayService
-
 func SetService(next *RelayService) {
-	serviceMu.Lock()
-	defer serviceMu.Unlock()
-	relayService = next
+	service.SetGlobalService(next)
 }
 
 func Service() *RelayService {
-	serviceMu.RLock()
-	defer serviceMu.RUnlock()
-	if relayService == nil {
-		panic("config service is not initialized")
-	}
-	return relayService
+	return service.GlobalService()
 }

@@ -7,8 +7,8 @@ import (
 )
 
 type MessageSender struct {
-	Role string `json:"role"`
-	ID   string `json:"id"`
+	Role MessageSenderRole `json:"role"`
+	ID   string            `json:"id"`
 }
 
 type MessageSource struct {
@@ -36,10 +36,10 @@ type Message struct {
 	CustomerKey     string         `json:"customerId"`
 	Sender          MessageSender  `json:"sender"`
 	Source          *MessageSource `json:"source,omitempty"`
-	Type            string         `json:"type"`
+	Type            MessageType    `json:"type"`
 	Text            string         `json:"text,omitempty"`
 	Content         *MessageMedia  `json:"content,omitempty"`
-	Status          string         `json:"status"`
+	Status          MessageStatus  `json:"status"`
 	ReceivedAt      string         `json:"receivedAt"`
 	CreatedAt       string         `json:"createdAt"`
 	UpdatedAt       string         `json:"updatedAt"`
@@ -50,14 +50,14 @@ type CreateMessageRequest struct {
 	CustomerID      string        `json:"customerId"`
 	Sender          MessageSender `json:"sender"`
 	Source          MessageSource `json:"source"`
-	Type            string        `json:"type"`
+	Type            MessageType   `json:"type"`
 	Text            string        `json:"text"`
 	Content         *MessageMedia `json:"content"`
-	Status          string        `json:"status,omitempty"`
+	Status          MessageStatus `json:"status,omitempty"`
 }
 
 type UpdateMessageStatusRequest struct {
-	Status string `json:"status"`
+	Status MessageStatus `json:"status"`
 }
 
 type MessageHistoryFilter = seqquery.Filter

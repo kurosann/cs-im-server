@@ -35,6 +35,7 @@ func AutoMigrateTestModels(db *gorm.DB) error {
 		&gatewaymodel.Customer{},
 		&gatewaymodel.Conversation{},
 		&gatewaymodel.Message{},
+		&gatewaymodel.HistoryRequest{},
 	)
 }
 
@@ -42,14 +43,14 @@ func NewTestGatewayServices() GatewayTestServices {
 	realtime := service.NewRealtimeService()
 	apps := service.NewAppService(realtime)
 	customers := service.NewCustomerService(realtime)
-	conversations := service.NewConversationService(apps, customers, nil, realtime)
+	messageActivity := service.NewMessageActivity(realtime)
+	conversations := service.NewConversationService(apps, customers, realtime, messageActivity)
 	messages := service.NewMessageService(apps, conversations, realtime)
-	conversations.SetMessages(service.NewConversationMessageStore(messages))
 
-	services := GatewayTestServices{
+	testServices := GatewayTestServices{
 		Apps: apps, Conversations: conversations,
 		Messages: messages, Realtime: realtime,
 	}
 	gatewayruntime.SetCapabilities(apps, conversations, messages, realtime, realtime, messages)
-	return services
+	return testServices
 }

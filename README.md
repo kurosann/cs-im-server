@@ -49,7 +49,7 @@ CS IM 聚合客服系统的后端服务。当前处于可联调阶段，提供�
 - 实现 `cs-im-internal-sdk` 中的 `RelayChannelService` gRPC 契约。
 - 管理转发渠道、Webhook、AI 配置和投递记录。
 - 对管理侧提供 `/admin/v1` 配置接口。
-- 对转发渠道提供 `/api/v1` 客服消息发送、客户消息订阅和历史消息能力。
+- 对转发渠道提供 `/api/v1/relays` 客服消息发送、客户消息订阅和历史消息能力。
 - relay 身份只能发送客服消息、接收客户消息，不能冒充业务渠道发送客户消息。
 
 `relay` 是出口编排层；最终的会话、客户、消息等核心数据仍归属 `gateway`。
@@ -101,7 +101,7 @@ make build
 版本接口：
 
 ```bash
-curl http://127.0.0.1:8080/api/v1/version
+curl http://127.0.0.1:8080/admin/v1/version
 ```
 
 健康检查、Prometheus 等遥测能力由 `cs-im-common` 内置，本工程不单独定义 `healthz` / `readyz` 路由。

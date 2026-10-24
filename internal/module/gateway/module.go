@@ -36,9 +36,9 @@ func (m *Module) Init(_ context.Context) error {
 	m.realtime = service.NewRealtimeService(realtimeBus)
 	m.apps = service.NewAppService(m.realtime)
 	m.customers = service.NewCustomerService(m.realtime)
-	m.conversations = service.NewConversationService(m.apps, m.customers, nil, m.realtime)
+	messageActivity := service.NewMessageActivity(m.realtime)
+	m.conversations = service.NewConversationService(m.apps, m.customers, m.realtime, messageActivity)
 	m.messages = service.NewMessageService(m.apps, m.conversations, m.realtime)
-	m.conversations.SetMessages(service.NewConversationMessageStore(m.messages))
 	gatewayruntime.SetCapabilities(m.apps, m.conversations, m.messages, m.realtime, m.realtime, m.messages)
 
 	return nil
@@ -50,6 +50,7 @@ func (m *Module) Model() []commonmodule.ModelRegInfo {
 		commonmodule.NewModelRegInfo(&model.Customer{}),
 		commonmodule.NewModelRegInfo(&model.Conversation{}),
 		commonmodule.NewModelRegInfo(&model.Message{}),
+		commonmodule.NewModelRegInfo(&model.HistoryRequest{}),
 	}
 }
 
@@ -59,7 +60,7 @@ func (m *Module) Task() []commonmodule.TaskRegInfo { return nil }
 
 func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	appAPI := api.NewAppAPI(m.apps, m.messages)
-	customerAPI := api.NewCustomerAPI(m.customers)
+	customerAPI := api.NewCustomerAPI(m.customers, m.conversations)
 	conversationAPI := api.NewConversationAPI(m.conversations)
 	messageAPI := api.NewMessageAPI(m.messages)
 	realtimeAPI := api.NewRealtimeAPI(m.realtime, m.conversations)

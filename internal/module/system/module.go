@@ -36,7 +36,7 @@ func (m *SystemModule) HttpApi() commonmodule.HttpApiInfo {
 	return commonmodule.HttpApiInfo{
 		Prefix: "",
 		Handlers: []commonmodule.HttpHandlerRegInfo{
-			commonmodule.NewGetReqHttpRegInfo("/api/v1/version", m.version),
+			commonmodule.NewGetReqHttpRegInfo("/admin/v1/version", m.version),
 		},
 	}
 }

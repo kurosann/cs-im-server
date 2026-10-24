@@ -2,39 +2,27 @@ package service
 
 import (
 	"context"
-	"sort"
-	"sync"
 	"time"
 
 	"vane-common/pkg/dataaccess"
 	"vane-common/pkg/idutil"
 
 	gatewaydto "cs-im-server/internal/module/gateway/dto"
+	"cs-im-server/internal/module/gateway/internal/model"
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
+	iamprincipal "cs-im-server/internal/module/iam/pkg/principal"
 )
 
 type AppService struct {
-	mu           sync.RWMutex
-	loadOnce     sync.Once
-	loadErr      error
-	accessor     dataaccess.DataAccessor[*App]
-	apps         map[string]*App
-	idsByService map[string]string
-	realtime     *RealtimeService
+	accessor dataaccess.DataAccessor[*model.App]
+	realtime *RealtimeService
 }
 
 func NewAppService(realtime *RealtimeService) *AppService {
-	return &AppService{
-		apps:         make(map[string]*App),
-		idsByService: make(map[string]string),
-		realtime:     realtime,
-	}
+	return &AppService{realtime: realtime}
 }
 
-func (s *AppService) Register(_ context.Context, principal Principal, req gatewaydto.RegisterAppRequest) (gatewaydto.App, error) {
-	if err := s.ensureLoaded(); err != nil {
-		return gatewaydto.App{}, err
-	}
+func (s *AppService) Register(_ context.Context, principal iamprincipal.Principal, req gatewaydto.RegisterAppRequest) (gatewaydto.App, error) {
 	if req.ServiceKey == "" {
 		return gatewaydto.App{}, badRequest("serviceKey is required")
 	}
@@ -43,11 +31,12 @@ func (s *AppService) Register(_ context.Context, principal Principal, req gatewa
 	}
 
 	now := time.Now().UTC()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if appID, ok := s.idsByService[serviceKeyLookupKey(principal.TenantID, req.ServiceKey)]; ok {
-		app := s.apps[appID]
+	existing, err := s.GetByTenantAndService(context.Background(), principal.TenantID, req.ServiceKey)
+	if err != nil {
+		return gatewaydto.App{}, err
+	}
+	if existing != nil {
+		app := existing
 		app.DisplayName = req.DisplayName
 		app.Kind = req.Kind
 		app.Version = req.Version
@@ -60,7 +49,7 @@ func (s *AppService) Register(_ context.Context, principal Principal, req gatewa
 	}
 
 	id := "app_" + idutil.GenShortId()
-	app := &App{
+	app := &model.App{
 		AppKey:          id,
 		TenantID:        principal.TenantID,
 		ServiceKey:      req.ServiceKey,
@@ -77,72 +66,58 @@ func (s *AppService) Register(_ context.Context, principal Principal, req gatewa
 	if err := s.accessor.Save(context.Background(), app); err != nil {
 		return gatewaydto.App{}, err
 	}
-	s.apps[app.AppKey] = app
-	s.idsByService[serviceKeyLookupKey(app.TenantID, req.ServiceKey)] = app.AppKey
 	result := *app
 	s.realtime.Publish("app.registered", id, appToDTO(&result))
 	return appToDTO(&result), nil
 }
 
-func (s *AppService) List(_ context.Context, principal Principal) []App {
-	if err := s.ensureLoaded(); err != nil {
-		return []App{}
+func (s *AppService) List(_ context.Context, principal iamprincipal.Principal) []model.App {
+	conditions, err := s.listConditions(principal)
+	if err != nil {
+		return []model.App{}
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	apps := make([]App, 0, len(s.apps))
-	for _, app := range s.apps {
-		if s.accessible(app, principal) != nil {
-			continue
+	apps, err := s.listApps(context.Background(), conditions...)
+	if err != nil {
+		return []model.App{}
+	}
+	items := make([]model.App, 0, len(apps))
+	for i := range apps {
+		if s.accessible(&apps[i], principal) == nil {
+			items = append(items, apps[i])
 		}
-		apps = append(apps, *app)
 	}
-	sort.Slice(apps, func(i, j int) bool { return apps[i].CreateAt.Before(apps[j].CreateAt) })
-	return apps
+	return items
 }
 
-func (s *AppService) Get(_ context.Context, id string) (App, error) {
-	if err := s.ensureLoaded(); err != nil {
-		return App{}, err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	app, ok := s.apps[id]
-	if !ok {
-		return App{}, notFound("app %s not found", id)
+func (s *AppService) Get(_ context.Context, id string) (model.App, error) {
+	app, err := s.getByKey(context.Background(), id)
+	if err != nil {
+		return model.App{}, notFound("app %s not found", id)
 	}
 	return *app, nil
 }
 
-func (s *AppService) GetAuthorized(_ context.Context, principal Principal, id string) (App, error) {
-	if err := s.ensureLoaded(); err != nil {
-		return App{}, err
-	}
+func (s *AppService) GetAuthorized(_ context.Context, principal iamprincipal.Principal, id string) (model.App, error) {
 	app, err := s.Get(context.Background(), id)
 	if err != nil {
-		return App{}, err
+		return model.App{}, err
 	}
 	if err := s.accessible(&app, principal); err != nil {
-		return App{}, err
+		return model.App{}, err
 	}
 	return app, nil
 }
 
-func (s *AppService) Heartbeat(_ context.Context, principal Principal, req gatewaydto.HeartbeatRequest) (gatewaydto.App, error) {
-	if err := s.ensureLoaded(); err != nil {
-		return gatewaydto.App{}, err
-	}
+func (s *AppService) Heartbeat(_ context.Context, principal iamprincipal.Principal, req gatewaydto.HeartbeatRequest) (gatewaydto.App, error) {
 	if req.AppID == "" {
 		return gatewaydto.App{}, badRequest("appId is required")
 	}
 	now := time.Now().UTC()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	app, ok := s.apps[req.AppID]
-	if !ok {
+	app, err := s.getByKey(context.Background(), req.AppID)
+	if err != nil {
 		return gatewaydto.App{}, notFound("app %s not found", req.AppID)
 	}
-	if err := s.accessible(app, principal); err != nil {
+	if err := s.accessibleBusiness(app, principal); err != nil {
 		return gatewaydto.App{}, err
 	}
 	ttl := app.LeaseTTLSeconds
@@ -169,13 +144,8 @@ func (s *AppService) Heartbeat(_ context.Context, principal Principal, req gatew
 }
 
 func (s *AppService) MarkConnected(appID string) {
-	if err := s.ensureLoaded(); err != nil {
-		return
-	}
-	s.mu.Lock()
-	app, ok := s.apps[appID]
-	if !ok || app.Status != "active" {
-		s.mu.Unlock()
+	app, err := s.getByKey(context.Background(), appID)
+	if err != nil || app.Status != "active" {
 		return
 	}
 	now := time.Now().UTC()
@@ -184,43 +154,36 @@ func (s *AppService) MarkConnected(appID string) {
 	app.LeaseExpiresAt = &leaseExpiresAt
 	app.UpdateAt = now
 	if err := s.accessor.Save(context.Background(), app); err != nil {
-		s.mu.Unlock()
 		return
 	}
 	result := *app
-	s.mu.Unlock()
 	s.realtime.Publish("app.heartbeat", app.AppKey, appToDTO(&result))
 }
 
-func (s *AppService) SetStatus(_ context.Context, principal Principal, id string, enabled bool) (App, error) {
-	if err := s.ensureLoaded(); err != nil {
-		return App{}, err
-	}
+func (s *AppService) SetStatus(_ context.Context, principal iamprincipal.Principal, id string, enabled bool) (model.App, error) {
 	now := time.Now().UTC()
 	status := "disabled"
 	if enabled {
 		status = "active"
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	app, ok := s.apps[id]
-	if !ok {
-		return App{}, notFound("app %s not found", id)
+	app, err := s.getByKey(context.Background(), id)
+	if err != nil {
+		return model.App{}, notFound("app %s not found", id)
 	}
 	if err := s.accessible(app, principal); err != nil {
-		return App{}, err
+		return model.App{}, err
 	}
 	app.Status = status
 	app.UpdateAt = now
 	if err := s.accessor.Save(context.Background(), app); err != nil {
-		return App{}, err
+		return model.App{}, err
 	}
 	result := *app
 	s.realtime.Publish("app.status_changed", id, appToDTO(&result))
 	return result, nil
 }
 
-func (s *AppService) accessible(app *App, principal Principal) error {
+func (s *AppService) accessible(app *model.App, principal iamprincipal.Principal) error {
 	if principal.HasKind(iampkg.PrincipalKindHuman) {
 		if !principal.HasScope(iampkg.ScopeGatewayAdmin) {
 			return forbidden("principal cannot manage business apps")
@@ -242,53 +205,93 @@ func (s *AppService) accessible(app *App, principal Principal) error {
 	return nil
 }
 
-func (s *AppService) AuthorizeAccount(appID string, principal Principal) error {
-	if err := s.ensureLoaded(); err != nil {
-		return err
+func (s *AppService) accessibleBusiness(app *model.App, principal iamprincipal.Principal) error {
+	if !principal.HasKind(iampkg.PrincipalKindBusiness) {
+		return forbidden("only business credentials can access business channel")
 	}
+	if !principal.HasScope(iampkg.ScopeChannelAccess) || principal.AccountKey != app.AppKey {
+		return forbidden("channel credential cannot access app %s", app.AppKey)
+	}
+	if app.TenantID == "" || app.TenantID != principal.TenantID {
+		return forbidden("app %s does not belong to account tenant", app.AppKey)
+	}
+	return nil
+}
+
+func (s *AppService) AuthorizeAccount(appID string, principal iamprincipal.Principal) error {
 	if appID == "" {
 		return badRequest("appId is required")
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	app, ok := s.apps[appID]
-	if !ok {
+	app, err := s.getByKey(context.Background(), appID)
+	if err != nil {
 		return notFound("app %s not found", appID)
 	}
 	if app.Status != "active" {
 		return forbidden("app %s is disabled", appID)
 	}
-	if err := s.accessible(app, principal); err != nil {
+	if err := s.accessibleBusiness(app, principal); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *AppService) Load() error {
-	return s.ensureLoaded()
-}
-
-func (s *AppService) ensureLoaded() error {
-	s.loadOnce.Do(func() {
-		s.loadErr = s.load()
-	})
-	return s.loadErr
-}
-
-func (s *AppService) load() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	items, err := s.accessor.List(context.Background())
-	if err != nil {
-		return err
+func (s *AppService) listApps(ctx context.Context, conditions ...dataaccess.QueryCondition) ([]model.App, error) {
+	conditions = append(conditions, dataaccess.Order("create_at", dataaccess.OrderTypeAsc))
+	var found []*model.App
+	if err := s.accessor.ListWithOption(ctx, &found, dataaccess.WithConditions(conditions...)); err != nil {
+		return nil, err
 	}
-	for _, item := range items {
-		s.apps[item.AppKey] = item
-		s.idsByService[serviceKeyLookupKey(item.TenantID, item.ServiceKey)] = item.AppKey
+	apps := make([]model.App, 0, len(found))
+	for _, item := range found {
+		apps = append(apps, *item)
 	}
-	return nil
+	return apps, nil
 }
 
-func serviceKeyLookupKey(tenantID, serviceKey string) string {
-	return tenantID + "\x00" + serviceKey
+func (s *AppService) listConditions(principal iamprincipal.Principal) ([]dataaccess.QueryCondition, error) {
+	if principal.TenantID == "" {
+		return []dataaccess.QueryCondition{}, nil
+	}
+	switch {
+	case principal.HasKind(iampkg.PrincipalKindHuman) && principal.HasScope(iampkg.ScopeGatewayAdmin):
+		return []dataaccess.QueryCondition{dataaccess.Eq("tenant_id", principal.TenantID)}, nil
+	case principal.HasKind(iampkg.PrincipalKindBusiness) && principal.HasScope(iampkg.ScopeChannelAccess):
+		return []dataaccess.QueryCondition{
+			dataaccess.Eq("tenant_id", principal.TenantID),
+			dataaccess.Eq("app_key", principal.AccountKey),
+		}, nil
+	default:
+		return []dataaccess.QueryCondition{}, nil
+	}
+}
+
+func (s *AppService) getByKey(ctx context.Context, appID string) (*model.App, error) {
+	conditions := []dataaccess.QueryCondition{
+		dataaccess.Eq("app_key", appID),
+		dataaccess.Limit(1),
+	}
+	var found []*model.App
+	if err := s.accessor.ListWithOption(ctx, &found, dataaccess.WithConditions(conditions...)); err != nil {
+		return nil, err
+	}
+	if len(found) == 0 {
+		return nil, dataaccess.ErrDataNotFound
+	}
+	return found[0], nil
+}
+
+func (s *AppService) GetByTenantAndService(ctx context.Context, tenantID, serviceKey string) (*model.App, error) {
+	conditions := []dataaccess.QueryCondition{
+		dataaccess.Eq("tenant_id", tenantID),
+		dataaccess.Eq("service_key", serviceKey),
+		dataaccess.Limit(1),
+	}
+	var found []*model.App
+	if err := s.accessor.ListWithOption(ctx, &found, dataaccess.WithConditions(conditions...)); err != nil {
+		return nil, err
+	}
+	if len(found) == 0 {
+		return nil, nil
+	}
+	return found[0], nil
 }

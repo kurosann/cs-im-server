@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"cs-im-server/internal/module/iam/internal/service"
-	pkg "cs-im-server/internal/module/iam/pkg/iam"
+	iamprincipal "cs-im-server/internal/module/iam/pkg/principal"
 	"cs-im-server/pkg/httpapi"
 
 	commonmodule "vane-common/module"
@@ -37,9 +37,9 @@ func (a *ChannelCredentialAPI) Issue(ctx httpapi.Context) {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
 	}
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	result, err := a.Accounts.IssueChannelCredential(ctx.Context(), principal, req)
@@ -51,9 +51,9 @@ func (a *ChannelCredentialAPI) Issue(ctx httpapi.Context) {
 }
 
 func (a *ChannelCredentialAPI) List(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	items, err := a.Accounts.ListChannelCredentials(ctx.Context(), principal)
@@ -77,9 +77,9 @@ func (a *ChannelCredentialAPI) Revoke(ctx httpapi.Context) {
 }
 
 func (a *ChannelCredentialAPI) Rotate(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	result, err := a.Accounts.RotateChannelCredential(ctx.Context(), principal, ctx.Param("appId"))
@@ -91,9 +91,9 @@ func (a *ChannelCredentialAPI) Rotate(ctx httpapi.Context) {
 }
 
 func (a *ChannelCredentialAPI) Delete(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	if err := a.Accounts.DeleteChannelCredential(ctx.Context(), principal, ctx.Param("appId")); err != nil {
@@ -104,9 +104,9 @@ func (a *ChannelCredentialAPI) Delete(ctx httpapi.Context) {
 }
 
 func (a *ChannelCredentialAPI) setStatus(ctx httpapi.Context, status string) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	item, err := a.Accounts.SetChannelCredentialStatus(ctx.Context(), principal, ctx.Param("appId"), status)

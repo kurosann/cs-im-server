@@ -11,7 +11,7 @@ import (
 
 func TestRelayHttpApiRoutesRegister(t *testing.T) {
 	services := gatewaypkg.NewTestGatewayServices()
-	relaypkg.SetService(relayService.NewRelayService(services.Realtime))
+	relaypkg.SetService(relayService.NewRelayService(relayService.RuntimeDeps{Realtime: services.Realtime}))
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()

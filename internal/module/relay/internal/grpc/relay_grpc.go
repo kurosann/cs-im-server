@@ -7,7 +7,6 @@ import (
 
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	relayService "cs-im-server/internal/module/relay/internal/service"
-	relaypkg "cs-im-server/internal/module/relay/pkg"
 	"cs-im-server/pkg/grpcapi"
 	relayv1 "github.com/kurosann/cs-im-internal-sdk/relay/v1"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -16,11 +15,11 @@ import (
 type RelayChannelGRPCAPI struct {
 	relayv1.UnimplementedRelayChannelServiceServer
 	Accounts *iampkg.AccountService
-	Service  *relaypkg.RelayService
+	Service  *relayService.RelayService
 }
 
-func NewRelayChannelGRPCAPI(accounts *iampkg.AccountService, service *relaypkg.RelayService) *RelayChannelGRPCAPI {
-	return &RelayChannelGRPCAPI{Accounts: accounts, Service: service}
+func NewRelayChannelGRPCAPI(accounts *iampkg.AccountService, relaySvc *relayService.RelayService) *RelayChannelGRPCAPI {
+	return &RelayChannelGRPCAPI{Accounts: accounts, Service: relaySvc}
 }
 
 func (a *RelayChannelGRPCAPI) authorize(ctx context.Context) error {

@@ -47,6 +47,7 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 		gatewaypkg.GetAppAuthorizer(),
 		gatewaypkg.GetConversationIngress(),
 		gatewaypkg.GetMessageIngress(),
+		gatewaypkg.GetRealtimeSubscriber(),
 	)
 	routes := commonmodule.NewHttpRouteGroup("/api/v1").Compose(channelHTTP.Routes())
 	return commonmodule.HttpApiInfo{

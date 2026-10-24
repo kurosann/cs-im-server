@@ -8,6 +8,7 @@ import (
 	"cs-im-server/pkg/httpapi"
 	"cs-im-server/pkg/seqquery"
 	commonmodule "vane-common/module"
+	logger "vane-common/pkg/logger"
 )
 
 type MessageAPI struct {
@@ -19,12 +20,13 @@ func NewMessageAPI(messageService *service.MessageService) *MessageAPI {
 }
 
 func (a *MessageAPI) Create(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: create message", ctx.Request().Method, ctx.Request().URL.Path)
 	var req gatewaydto.CreateMessageRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
 	}
-	message, err := a.Service.Create(ctx.Context(), req)
+	message, err := a.Service.Create(ctx.Context(), req, true)
 	if err != nil {
 		writeServiceError(ctx, err)
 		return
@@ -33,6 +35,7 @@ func (a *MessageAPI) Create(ctx httpapi.Context) {
 }
 
 func (a *MessageAPI) Get(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: get message id=%s", ctx.Request().Method, ctx.Request().URL.Path, ctx.Param("id"))
 	message, err := a.Service.Get(ctx.Context(), ctx.Param("id"))
 	if err != nil {
 		writeServiceError(ctx, err)
@@ -42,6 +45,7 @@ func (a *MessageAPI) Get(ctx httpapi.Context) {
 }
 
 func (a *MessageAPI) UpdateStatus(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: update message status id=%s", ctx.Request().Method, ctx.Request().URL.Path, ctx.Param("id"))
 	var req gatewaydto.UpdateMessageStatusRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
@@ -55,21 +59,18 @@ func (a *MessageAPI) UpdateStatus(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", message)
 }
 
-func (a *MessageAPI) History(ctx httpapi.Context) {
-	filter, err := seqquery.FromHTTP(ctx)
+func (a *MessageAPI) Retry(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: retry message id=%s", ctx.Request().Method, ctx.Request().URL.Path, ctx.Param("id"))
+	message, err := a.Service.RetryMessage(ctx.Context(), ctx.Param("id"))
 	if err != nil {
 		writeServiceError(ctx, err)
 		return
 	}
-	page, err := a.Service.History(ctx.Context(), ctx.Param("id"), ctx.Param("conversationId"), filter)
-	if err != nil {
-		writeServiceError(ctx, err)
-		return
-	}
-	httpapi.WriteJSON(ctx, http.StatusOK, "OK", page)
+	httpapi.WriteJSON(ctx, http.StatusOK, "OK", message)
 }
 
 func (a *MessageAPI) ReverseHistory(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: reverse conversation history id=%s", ctx.Request().Method, ctx.Request().URL.Path, ctx.Param("id"))
 	var req gatewaydto.BatchCreateMessagesRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
@@ -101,14 +102,15 @@ func (a *MessageAPI) AdminRoutes() commonmodule.HttpRouteGroup {
 	routes.Post("", a.Create)
 	routes.Get("/:id", a.Get)
 	routes.Post("/:id/status", a.UpdateStatus)
+	routes.Post("/:id/retry", a.Retry)
 	return routes
 }
 
 func (a *MessageAPI) AdminConversationRoutes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/conversations")
 	routes.Get("/:id/messages", a.ConversationMessages)
-	routes.Get("/:id/messages/:conversationId", a.History)
 	routes.Post("/:id/channel-history", a.ReverseHistory)
+	routes.Post("/:id/history-requests", a.RequestHistory)
 	return routes
 }
 
@@ -118,6 +120,7 @@ func (a *MessageAPI) ConversationMessages(ctx httpapi.Context) {
 		writeServiceError(ctx, err)
 		return
 	}
+	logger.Debugf(ctx.Context(), "gateway api %s %s: list conversation messages id=%s afterSeq=%d beforeSeq=%d limit=%d", ctx.Request().Method, ctx.Request().URL.Path, ctx.Param("id"), filter.AfterSeq, filter.BeforeSeq, filter.Limit)
 	messages := a.Service.List(ctx.Context(), ctx.Param("id"), filter.AfterSeq, filter.BeforeSeq, filter.Limit)
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", messages)
 }

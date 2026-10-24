@@ -11,7 +11,7 @@ import (
 	relayhttp "cs-im-server/internal/module/relay/internal/http"
 	relaymodel "cs-im-server/internal/module/relay/internal/model"
 	relayService "cs-im-server/internal/module/relay/internal/service"
-	relaypkg "cs-im-server/internal/module/relay/pkg"
+	translationpkg "cs-im-server/internal/module/translation/pkg/translation"
 	relayv1 "github.com/kurosann/cs-im-internal-sdk/relay/v1"
 	commonmodule "vane-common/module"
 )
@@ -27,9 +27,12 @@ type Module struct {
 
 func (m *Module) Init(_ context.Context) error {
 	m.accounts = iampkg.Service()
-	m.relay = relayService.NewRelayService(gatewaypkg.GetRealtimePublisher())
-	relaypkg.SetService(m.relay)
-	gatewaybridge.Register(m.relay)
+	m.relay = relayService.NewRelayService(relayService.RuntimeDeps{
+		Realtime: gatewaypkg.GetRealtimePublisher(),
+		Inbound:  gatewaybridge.NewGatewayBridge(),
+	})
+	relayService.SetGlobalService(m.relay)
+	gatewaybridge.ObserveCustomerMessages(m.relay)
 	return nil
 }
 
@@ -85,14 +88,18 @@ func (m *Module) HttpApi() commonmodule.HttpApiInfo {
 	webhooks := relayhttp.NewWebhookAPI(m.relay)
 	ai := relayhttp.NewAIAPI(m.relay)
 	knowledge := relayhttp.NewKnowledgeAPI(m.relay)
-	realtime := relayhttp.NewRealtimeAPI(gatewaypkg.GetAppAuthorizer(), gatewaypkg.GetMessageIngress(), gatewaypkg.GetRealtimeSubscriber())
 	relayMessages := relayhttp.NewRelayMessageAPI(gatewaypkg.GetMessageEgress(), gatewaypkg.GetRealtimeSubscriber())
-	admin := commonmodule.NewHttpRouteGroup("/admin/v1").
-		Compose(channels.Routes(), webhooks.Routes(), ai.Routes())
-	channelEvents := commonmodule.NewHttpRouteGroup("/api/v1").Compose(realtime.Routes(), ai.EmployeeRoutes(), knowledge.Routes())
-	relayEvents := relayMessages.Routes()
+	relayTranslations := relayhttp.NewRelayTranslationAPI(translationpkg.Service)
+	admin := commonmodule.NewHttpRouteGroup("/admin/v1", commonmodule.WithGroupMiddlewares(
+		iamhttp.RequirePrincipalKind(iampkg.PrincipalKindHuman),
+		iamhttp.RequirePrincipalScope(iampkg.ScopeGatewayAdmin),
+	)).Compose(channels.Routes(), webhooks.Routes(), ai.Routes(), ai.EmployeeRoutes(), knowledge.Routes())
+	relayEvents := commonmodule.NewHttpRouteGroup("/api/v1/relays", commonmodule.WithGroupMiddlewares(
+		iamhttp.RequirePrincipalAnyKind(iampkg.PrincipalKindRelay, iampkg.PrincipalKindHuman),
+		iamhttp.RequirePrincipalScope(iampkg.ScopeRelayAccess),
+	)).Compose(relayMessages.Routes(), relayTranslations.Routes())
 	return commonmodule.HttpApiInfo{
-		Handlers:    commonmodule.MergeHandlers(admin.Handlers(), channelEvents.Handlers(), relayEvents.Handlers()),
+		Handlers:    commonmodule.MergeHandlers(admin.Handlers(), relayEvents.Handlers()),
 		Middlewares: []commonmodule.HttpMiddleware{iamhttp.AccountTokenMiddleware(m.accounts)},
 	}
 }

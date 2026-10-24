@@ -22,6 +22,7 @@ func WriteHeaders(ctx httpapi.Context) {
 	ctx.SetHeader("Connection", "keep-alive")
 	_ = ctx.SetWriteDeadline(time.Time{})
 	ctx.Status(http.StatusOK)
+	_ = ctx.Flush()
 }
 
 func WriteEvent(ctx httpapi.Context, event Event) error {

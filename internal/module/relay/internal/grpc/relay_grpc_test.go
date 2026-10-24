@@ -48,7 +48,7 @@ func setupRelayGRPC(t *testing.T) (*RelayChannelGRPCAPI, string) {
 	}
 	return NewRelayChannelGRPCAPI(
 		accounts,
-		relayservice.NewRelayService(realtimePublisherStub{}),
+		relayservice.NewRelayService(relayservice.RuntimeDeps{Realtime: realtimePublisherStub{}}),
 	), issued.Secret
 }
 

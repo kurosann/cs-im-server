@@ -1,24 +1,26 @@
 package api
 
 import (
+	"cs-im-server/internal/module/gateway/internal/runtime"
 	"cs-im-server/internal/module/gateway/internal/service"
-	gatewaypkg "cs-im-server/internal/module/gateway/pkg"
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	"cs-im-server/pkg/httpapi"
 	"cs-im-server/pkg/sse"
 	commonmodule "vane-common/module"
+	logger "vane-common/pkg/logger"
 )
 
 type RealtimeAPI struct {
-	Realtime      gatewaypkg.RealtimeSubscriber
+	Realtime      runtime.RealtimeSubscriber
 	Conversations *service.ConversationService
 }
 
-func NewRealtimeAPI(realtime gatewaypkg.RealtimeSubscriber, conversations *service.ConversationService) *RealtimeAPI {
+func NewRealtimeAPI(realtime runtime.RealtimeSubscriber, conversations *service.ConversationService) *RealtimeAPI {
 	return &RealtimeAPI{Realtime: realtime, Conversations: conversations}
 }
 
 func (a *RealtimeAPI) Stream(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: stream realtime events", ctx.Request().Method, ctx.Request().URL.Path)
 	principal, ok := iampkg.PrincipalFromContext(ctx.Context())
 	if !ok {
 		writeServiceError(ctx, iampkg.ErrPrincipalMissing)

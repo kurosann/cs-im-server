@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"cs-im-server/internal/module/iam/internal/service"
-	pkg "cs-im-server/internal/module/iam/pkg/iam"
+	iamprincipal "cs-im-server/internal/module/iam/pkg/principal"
 	"cs-im-server/pkg/httpapi"
 
 	commonmodule "vane-common/module"
@@ -27,9 +27,9 @@ func (a *AuditAPI) Routes() commonmodule.HttpRouteGroup {
 }
 
 func (a *AuditAPI) List(ctx httpapi.Context) {
-	principal, ok := pkg.PrincipalFromContext(ctx.Context())
+	principal, ok := iamprincipal.FromContext(ctx.Context())
 	if !ok {
-		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", pkg.ErrPrincipalMissing.Error())
+		httpapi.WriteError(ctx, http.StatusUnauthorized, "UNAUTHORIZED", iamprincipal.ErrMissing.Error())
 		return
 	}
 	page, _ := strconv.Atoi(ctx.Query("page"))

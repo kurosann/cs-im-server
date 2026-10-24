@@ -10,11 +10,14 @@ import (
 
 type bridge struct{}
 
-func Register(service *relayservice.RelayService) {
+func NewGatewayBridge() relayservice.InboundGateway {
+	return &bridge{}
+}
+
+func ObserveCustomerMessages(service *relayservice.RelayService) {
 	if service == nil {
 		return
 	}
-	service.SetInboundGateway(bridge{})
 	gatewaypkg.SetCustomerMessageObserver(func(message gatewaypkg.Message) {
 		service.EnqueueInbound(relayservice.InboundMessage{
 			ID:             message.MessageKey,
@@ -47,8 +50,8 @@ func (bridge) RecentMessages(ctx context.Context, conversationID string, limit i
 	for _, message := range messages {
 		out = append(out, relayservice.TranscriptMessage{
 			ID:   message.MessageKey,
-			Role: message.Sender.Role,
-			Type: message.Type,
+			Role: string(message.Sender.Role),
+			Type: string(message.Type),
 			Text: message.Text,
 			Seq:  message.Seq,
 		})

@@ -13,12 +13,6 @@ import (
 
 type RelayService struct {
 	mu               sync.RWMutex
-	channelOnce      sync.Once
-	channelErr       error
-	webhookOnce      sync.Once
-	webhookErr       error
-	aiOnce           sync.Once
-	aiErr            error
 	channelAccessor  dataaccess.DataAccessor[*Channel]
 	webhookAccessor  dataaccess.DataAccessor[*Webhook]
 	aiConfigAccessor dataaccess.DataAccessor[*AIConfig]
@@ -35,27 +29,25 @@ type RelayService struct {
 	inboundMu        sync.Mutex
 	inboundPending   map[string]*inboundBatch
 	inboundLanes     map[string]*sync.Mutex
-	channels         map[string]*Channel
-	webhooks         map[string]*Webhook
 	aiConfigID       int64
-	aiConfig         AIConfig
-	aiExecutions     []*AIExecution
 	realtime         RealtimePublisher
 }
 
-func NewRelayService(realtime RealtimePublisher) *RelayService {
+type RuntimeDeps struct {
+	Realtime  RealtimePublisher
+	Inbound   InboundGateway
+	Completer CompletionClient
+}
+
+func NewRelayService(deps RuntimeDeps) *RelayService {
 	return &RelayService{
-		channels: make(map[string]*Channel),
-		webhooks: make(map[string]*Webhook),
-		aiConfig: AIConfig{Prompt: "You are a helpful customer service assistant.", HistoryMessageCount: 20, AutoReplyEnabled: true, ReportingEnabled: true},
-		realtime: realtime,
+		completer: deps.Completer,
+		inbound:   deps.Inbound,
+		realtime:  deps.Realtime,
 	}
 }
 
 func (s *RelayService) CreateChannel(_ context.Context, req relaydto.CreateChannelRequest) (Channel, error) {
-	if err := s.ensureChannels(); err != nil {
-		return Channel{}, err
-	}
 	if req.Name == "" {
 		return Channel{}, badRequest("name is required")
 	}
@@ -63,52 +55,34 @@ func (s *RelayService) CreateChannel(_ context.Context, req relaydto.CreateChann
 		return Channel{}, badRequest("type is required")
 	}
 	channel := &Channel{ChannelKey: "chn_" + idutil.GenShortId(), Name: req.Name, Type: req.Type, Endpoint: req.Endpoint, Config: cloneMap(req.Config), Status: "active"}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if err := s.channelAccessor.Save(context.Background(), channel); err != nil {
 		return Channel{}, err
 	}
-	s.channels[channel.ChannelKey] = channel
 	result := *channel
 	s.realtime.Publish("channel.created", channel.ChannelKey, result)
 	return result, nil
 }
 
 func (s *RelayService) ListChannels(_ context.Context) []Channel {
-	if err := s.ensureChannels(); err != nil {
+	channels, err := s.listChannels(context.Background())
+	if err != nil {
 		return []Channel{}
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	channels := make([]Channel, 0, len(s.channels))
-	for _, channel := range s.channels {
-		channels = append(channels, *channel)
 	}
 	return channels
 }
 
 func (s *RelayService) GetChannel(_ context.Context, id string) (Channel, error) {
-	if err := s.ensureChannels(); err != nil {
-		return Channel{}, err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	channel, ok := s.channels[id]
-	if !ok {
+	channel, err := s.getChannelByKey(context.Background(), id)
+	if err != nil {
 		return Channel{}, notFound("channel %s not found", id)
 	}
 	return *channel, nil
 }
 
 func (s *RelayService) UpdateChannel(_ context.Context, id string, req relaydto.UpdateChannelRequest) (Channel, error) {
-	if err := s.ensureChannels(); err != nil {
-		return Channel{}, err
-	}
 	now := time.Now().UTC()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	channel, ok := s.channels[id]
-	if !ok {
+	channel, err := s.getChannelByKey(context.Background(), id)
+	if err != nil {
 		return Channel{}, notFound("channel %s not found", id)
 	}
 	if req.Name != "" {
@@ -133,18 +107,13 @@ func (s *RelayService) UpdateChannel(_ context.Context, id string, req relaydto.
 }
 
 func (s *RelayService) SetChannelStatus(_ context.Context, id string, enabled bool) (Channel, error) {
-	if err := s.ensureChannels(); err != nil {
-		return Channel{}, err
-	}
 	now := time.Now().UTC()
 	status := "disabled"
 	if enabled {
 		status = "active"
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	channel, ok := s.channels[id]
-	if !ok {
+	channel, err := s.getChannelByKey(context.Background(), id)
+	if err != nil {
 		return Channel{}, notFound("channel %s not found", id)
 	}
 	channel.Status = status
@@ -158,14 +127,9 @@ func (s *RelayService) SetChannelStatus(_ context.Context, id string, enabled bo
 }
 
 func (s *RelayService) TestChannel(_ context.Context, id string) (Channel, error) {
-	if err := s.ensureChannels(); err != nil {
-		return Channel{}, err
-	}
 	now := time.Now().UTC()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	channel, ok := s.channels[id]
-	if !ok {
+	channel, err := s.getChannelByKey(context.Background(), id)
+	if err != nil {
 		return Channel{}, notFound("channel %s not found", id)
 	}
 	channel.LastTestedAt = &now
@@ -179,9 +143,6 @@ func (s *RelayService) TestChannel(_ context.Context, id string) (Channel, error
 }
 
 func (s *RelayService) CreateWebhook(_ context.Context, req relaydto.CreateWebhookRequest) (Webhook, error) {
-	if err := s.ensureWebhooks(); err != nil {
-		return Webhook{}, err
-	}
 	if req.Name == "" {
 		return Webhook{}, badRequest("name is required")
 	}
@@ -192,52 +153,34 @@ func (s *RelayService) CreateWebhook(_ context.Context, req relaydto.CreateWebho
 	if req.IsActive {
 		webhook.Status = "active"
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if err := s.webhookAccessor.Save(context.Background(), webhook); err != nil {
 		return Webhook{}, err
 	}
-	s.webhooks[webhook.WebhookKey] = webhook
 	result := *webhook
 	s.realtime.Publish("webhook.created", webhook.WebhookKey, result)
 	return result, nil
 }
 
 func (s *RelayService) ListWebhooks(_ context.Context) []Webhook {
-	if err := s.ensureWebhooks(); err != nil {
+	webhooks, err := s.listWebhooks(context.Background())
+	if err != nil {
 		return []Webhook{}
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	webhooks := make([]Webhook, 0, len(s.webhooks))
-	for _, webhook := range s.webhooks {
-		webhooks = append(webhooks, *webhook)
 	}
 	return webhooks
 }
 
 func (s *RelayService) GetWebhook(_ context.Context, id string) (Webhook, error) {
-	if err := s.ensureWebhooks(); err != nil {
-		return Webhook{}, err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	webhook, ok := s.webhooks[id]
-	if !ok {
+	webhook, err := s.getWebhookByKey(context.Background(), id)
+	if err != nil {
 		return Webhook{}, notFound("webhook %s not found", id)
 	}
 	return *webhook, nil
 }
 
 func (s *RelayService) UpdateWebhook(_ context.Context, id string, req relaydto.UpdateWebhookRequest) (Webhook, error) {
-	if err := s.ensureWebhooks(); err != nil {
-		return Webhook{}, err
-	}
 	now := time.Now().UTC()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	webhook, ok := s.webhooks[id]
-	if !ok {
+	webhook, err := s.getWebhookByKey(context.Background(), id)
+	if err != nil {
 		return Webhook{}, notFound("webhook %s not found", id)
 	}
 	if req.Name != "" {
@@ -262,31 +205,21 @@ func (s *RelayService) UpdateWebhook(_ context.Context, id string, req relaydto.
 }
 
 func (s *RelayService) TestWebhook(_ context.Context, id string) (Webhook, error) {
-	if err := s.ensureWebhooks(); err != nil {
-		return Webhook{}, err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	webhook, ok := s.webhooks[id]
-	if !ok {
+	webhook, err := s.getWebhookByKey(context.Background(), id)
+	if err != nil {
 		return Webhook{}, notFound("webhook %s not found", id)
 	}
 	return *webhook, nil
 }
 
 func (s *RelayService) SetWebhookStatus(_ context.Context, id string, enabled bool) (Webhook, error) {
-	if err := s.ensureWebhooks(); err != nil {
-		return Webhook{}, err
-	}
 	now := time.Now().UTC()
 	status := "disabled"
 	if enabled {
 		status = "active"
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	webhook, ok := s.webhooks[id]
-	if !ok {
+	webhook, err := s.getWebhookByKey(context.Background(), id)
+	if err != nil {
 		return Webhook{}, notFound("webhook %s not found", id)
 	}
 	webhook.Status = status
@@ -300,129 +233,139 @@ func (s *RelayService) SetWebhookStatus(_ context.Context, id string, enabled bo
 }
 
 func (s *RelayService) DeleteWebhook(_ context.Context, id string) error {
-	if err := s.ensureWebhooks(); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	webhook, ok := s.webhooks[id]
-	if !ok {
+	webhook, err := s.getWebhookByKey(context.Background(), id)
+	if err != nil {
 		return notFound("webhook %s not found", id)
 	}
 	if err := s.webhookAccessor.Delete(context.Background(), webhook); err != nil {
 		return err
 	}
-	delete(s.webhooks, id)
 	s.realtime.Publish("webhook.deleted", id, nil)
 	return nil
 }
 
 func (s *RelayService) GetAIConfig(_ context.Context) AIConfig {
-	if err := s.ensureAIConfig(); err != nil {
+	item, err := s.getAIConfig(context.Background())
+	if err != nil {
 		return AIConfig{}
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.aiConfig
+	if item != nil {
+		return *item
+	}
+	return AIConfig{Prompt: "You are a helpful customer service assistant.", HistoryMessageCount: 20, AutoReplyEnabled: true, ReportingEnabled: true}
 }
 
-func (s *RelayService) UpdateAIConfig(_ context.Context, req AIConfig) AIConfig {
-	if err := s.ensureAIConfig(); err != nil {
+func (s *RelayService) UpdateAIConfig(ctx context.Context, req AIConfig) AIConfig {
+	existing, err := s.getAIConfig(ctx)
+	if err != nil {
 		return AIConfig{}
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	item := req
-	item.ID = s.aiConfigID
-	if err := s.aiConfigAccessor.Save(context.Background(), &item); err != nil {
-		return s.aiConfig
+	if existing != nil {
+		item = *existing
 	}
-	s.aiConfigID = item.ID
-	s.aiConfig = item
-	s.realtime.Publish("ai.config_updated", "", s.aiConfig)
-	return s.aiConfig
+	if err := s.aiConfigAccessor.Save(ctx, &item); err != nil {
+		if existing != nil {
+			return *existing
+		}
+		return AIConfig{}
+	}
+	s.realtime.Publish("ai.config_updated", "", item)
+	return item
 }
 
 func (s *RelayService) ListAIExecutions(_ context.Context) []AIExecution {
-	if err := s.ensureAIConfig(); err != nil {
+	items, err := s.listAIExecutions(context.Background())
+	if err != nil {
 		return []AIExecution{}
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	executions := make([]AIExecution, 0, len(s.aiExecutions))
-	for _, execution := range s.aiExecutions {
-		executions = append(executions, *execution)
-	}
-	return executions
+	return items
 }
 
 func (s *RelayService) Load() error {
-	if err := s.ensureChannels(); err != nil {
-		return err
-	}
-	if err := s.ensureWebhooks(); err != nil {
-		return err
-	}
-	return s.ensureAIConfig()
-}
-
-func (s *RelayService) ensureChannels() error {
-	s.channelOnce.Do(func() {
-		s.channelErr = s.loadChannels()
-	})
-	return s.channelErr
-}
-
-func (s *RelayService) ensureWebhooks() error {
-	s.webhookOnce.Do(func() {
-		s.webhookErr = s.loadWebhooks()
-	})
-	return s.webhookErr
-}
-
-func (s *RelayService) ensureAIConfig() error {
-	s.aiOnce.Do(func() {
-		s.aiErr = s.loadAIConfig()
-	})
-	return s.aiErr
-}
-
-func (s *RelayService) loadChannels() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	channels, err := s.channelAccessor.List(context.Background())
-	if err != nil {
-		return err
-	}
-	for _, channel := range channels {
-		s.channels[channel.ChannelKey] = channel
-	}
-	return nil
-}
-
-func (s *RelayService) loadWebhooks() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	webhooks, err := s.webhookAccessor.List(context.Background())
-	if err != nil {
-		return err
-	}
-	for _, webhook := range webhooks {
-		s.webhooks[webhook.WebhookKey] = webhook
-	}
-	return nil
-}
-
-func (s *RelayService) loadAIConfig() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	aiConfigs, err := s.aiConfigAccessor.List(context.Background())
-	if err != nil {
-		return err
-	}
-	if len(aiConfigs) > 0 {
-		s.aiConfig = *aiConfigs[0]
-		s.aiConfigID = aiConfigs[0].ID
-	}
 	return s.backfillEmployeeTenants(context.Background())
+}
+func (s *RelayService) listChannels(ctx context.Context) ([]Channel, error) {
+	var found []*Channel
+	if err := s.channelAccessor.ListWithOption(ctx, &found, dataaccess.WithConditions(
+		dataaccess.Order("create_at", dataaccess.OrderTypeAsc),
+	)); err != nil {
+		return nil, err
+	}
+	channels := make([]Channel, 0, len(found))
+	for _, item := range found {
+		channels = append(channels, *item)
+	}
+	return channels, nil
+}
+
+func (s *RelayService) getChannelByKey(ctx context.Context, id string) (*Channel, error) {
+	var found []*Channel
+	if err := s.channelAccessor.ListWithOption(ctx, &found, dataaccess.WithConditions(
+		dataaccess.Eq("channel_key", id),
+		dataaccess.Limit(1),
+	)); err != nil {
+		return nil, err
+	}
+	if len(found) == 0 {
+		return nil, dataaccess.ErrDataNotFound
+	}
+	return found[0], nil
+}
+
+func (s *RelayService) listWebhooks(ctx context.Context) ([]Webhook, error) {
+	var found []*Webhook
+	if err := s.webhookAccessor.ListWithOption(ctx, &found, dataaccess.WithConditions(
+		dataaccess.Order("create_at", dataaccess.OrderTypeAsc),
+	)); err != nil {
+		return nil, err
+	}
+	webhooks := make([]Webhook, 0, len(found))
+	for _, item := range found {
+		webhooks = append(webhooks, *item)
+	}
+	return webhooks, nil
+}
+
+func (s *RelayService) getWebhookByKey(ctx context.Context, id string) (*Webhook, error) {
+	var found []*Webhook
+	if err := s.webhookAccessor.ListWithOption(ctx, &found, dataaccess.WithConditions(
+		dataaccess.Eq("webhook_key", id),
+		dataaccess.Limit(1),
+	)); err != nil {
+		return nil, err
+	}
+	if len(found) == 0 {
+		return nil, dataaccess.ErrDataNotFound
+	}
+	return found[0], nil
+}
+
+func (s *RelayService) getAIConfig(ctx context.Context) (*AIConfig, error) {
+	var found []*AIConfig
+	if err := s.aiConfigAccessor.ListWithOption(ctx, &found, dataaccess.WithConditions(
+		dataaccess.Order("create_at", dataaccess.OrderTypeAsc),
+		dataaccess.Limit(1),
+	)); err != nil {
+		return nil, err
+	}
+	if len(found) == 0 {
+		return nil, nil
+	}
+	return found[0], nil
+}
+
+func (s *RelayService) listAIExecutions(ctx context.Context) ([]AIExecution, error) {
+	var found []*AIExecution
+	if err := s.executions.ListWithOption(ctx, &found, dataaccess.WithConditions(
+		dataaccess.Order("create_at", dataaccess.OrderTypeDesc),
+		dataaccess.Limit(100),
+	)); err != nil {
+		return nil, err
+	}
+	executions := make([]AIExecution, 0, len(found))
+	for _, item := range found {
+		executions = append(executions, *item)
+	}
+	return executions, nil
 }

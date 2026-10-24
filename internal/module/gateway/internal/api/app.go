@@ -10,6 +10,7 @@ import (
 	"cs-im-server/pkg/httpapi"
 	"cs-im-server/pkg/seqquery"
 	commonmodule "vane-common/module"
+	logger "vane-common/pkg/logger"
 )
 
 type AppAPI struct {
@@ -26,6 +27,7 @@ func NewAppAPI(appService *service.AppService, messageService MessageHistoryServ
 }
 
 func (a *AppAPI) Register(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: register app", ctx.Request().Method, ctx.Request().URL.Path)
 	principal, ok := iampkg.PrincipalFromContext(ctx.Context())
 	if !ok {
 		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
@@ -45,6 +47,7 @@ func (a *AppAPI) Register(ctx httpapi.Context) {
 }
 
 func (a *AppAPI) List(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: list apps", ctx.Request().Method, ctx.Request().URL.Path)
 	principal, ok := iampkg.PrincipalFromContext(ctx.Context())
 	if !ok {
 		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
@@ -55,6 +58,7 @@ func (a *AppAPI) List(ctx httpapi.Context) {
 }
 
 func (a *AppAPI) Get(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: get app id=%s", ctx.Request().Method, ctx.Request().URL.Path, ctx.Param("id"))
 	principal, ok := iampkg.PrincipalFromContext(ctx.Context())
 	if !ok {
 		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
@@ -68,26 +72,8 @@ func (a *AppAPI) Get(ctx httpapi.Context) {
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", app)
 }
 
-func (a *AppAPI) Heartbeat(ctx httpapi.Context) {
-	principal, ok := iampkg.PrincipalFromContext(ctx.Context())
-	if !ok {
-		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
-		return
-	}
-	var req gatewaydto.HeartbeatRequest
-	if err := ctx.BindJSON(&req); err != nil {
-		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
-		return
-	}
-	app, err := a.Service.Heartbeat(ctx.Context(), principal, req)
-	if err != nil {
-		writeServiceError(ctx, err)
-		return
-	}
-	httpapi.WriteJSON(ctx, http.StatusOK, "OK", app)
-}
-
 func (a *AppAPI) Enable(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: enable app id=%s", ctx.Request().Method, ctx.Request().URL.Path, ctx.Param("id"))
 	principal, ok := iampkg.PrincipalFromContext(ctx.Context())
 	if !ok {
 		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
@@ -102,6 +88,7 @@ func (a *AppAPI) Enable(ctx httpapi.Context) {
 }
 
 func (a *AppAPI) Disable(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: disable app id=%s", ctx.Request().Method, ctx.Request().URL.Path, ctx.Param("id"))
 	principal, ok := iampkg.PrincipalFromContext(ctx.Context())
 	if !ok {
 		writeServiceError(ctx, iampkg.ErrPrincipalMissing)
@@ -116,6 +103,7 @@ func (a *AppAPI) Disable(ctx httpapi.Context) {
 }
 
 func (a *AppAPI) Messages(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: list app messages appID=%s conversationID=%s", ctx.Request().Method, ctx.Request().URL.Path, ctx.Param("id"), ctx.Param("conversationId"))
 	filter, err := seqquery.FromHTTP(ctx)
 	if err != nil {
 		writeServiceError(ctx, err)
@@ -132,7 +120,6 @@ func (a *AppAPI) Messages(ctx httpapi.Context) {
 func (a *AppAPI) AdminRoutes() commonmodule.HttpRouteGroup {
 	routes := commonmodule.NewHttpRouteGroup("/apps")
 	routes.Post("/register", a.Register)
-	routes.Post("/heartbeat", a.Heartbeat)
 	routes.Get("", a.List)
 	routes.Get("/:id", a.Get)
 	routes.Get("/:id/conversations/:conversationId/messages", a.Messages)

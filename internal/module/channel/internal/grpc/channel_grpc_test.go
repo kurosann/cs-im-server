@@ -10,7 +10,6 @@ import (
 	iampkg "cs-im-server/internal/module/iam/pkg/iam"
 	gatewayv1 "github.com/kurosann/cs-im-sdk/gateway/v1"
 	"vane-common/pkg/dataaccess/store"
-	"vane-common/pkg/safe"
 	"vane-common/pkg/sqlitedb"
 
 	"google.golang.org/grpc/codes"
@@ -172,54 +171,6 @@ func TestChannelGatewayCustomerBoundary(t *testing.T) {
 	if len(page.Items) != 2 || page.Items[0].MessageId != agent.Message.MessageId || page.Items[1].MessageId != customer.Message.MessageId {
 		t.Fatalf("ListMessages() = %+v", page)
 	}
-}
-
-func TestChannelGatewayStreamFiltersCustomerMessages(t *testing.T) {
-	fixture := setupChannelGateway(t)
-	streamContext, cancel := context.WithCancel(fixture.tokenCtx)
-	defer cancel()
-	stream := &testingServerStream{
-		context: streamContext,
-		events:  make(chan gatewayv1.MessageEventResponse, 2),
-	}
-	streamDone := make(chan error, 1)
-	safe.Go(func() {
-		streamDone <- fixture.api.StreamMessages(&gatewayv1.StreamMessagesRequest{AppId: fixture.appID}, stream)
-	})
-
-	published := false
-	for i := 0; i < 10; i++ {
-		time.Sleep(10 * time.Millisecond)
-		if !published {
-			fixture.realtime.Publish("message.created", "msg_1", gatewaydto.Message{
-				MessageKey: "msg_1", ConversationKey: fixture.conversationID, CustomerKey: "cus_1",
-				Sender: gatewaydto.MessageSender{Role: "customer", ID: "cus_1"}, Type: "text", Text: "blocked",
-			})
-		}
-		fixture.realtime.Publish("message.created", "msg_2", gatewaydto.Message{
-			MessageKey: "msg_2", ConversationKey: fixture.conversationID, CustomerKey: "cus_1",
-			Sender: gatewaydto.MessageSender{Role: "agent", ID: "agent_1"}, Type: "text", Text: "allowed",
-		})
-		published = true
-		select {
-		case event := <-stream.events:
-			if event.Message.MessageId != "msg_2" || event.Message.Sender.Role != "agent" {
-				t.Fatalf("StreamMessages() event = %+v", event)
-			}
-			cancel()
-			select {
-			case err := <-streamDone:
-				if err != nil {
-					t.Fatalf("StreamMessages() error = %v", err)
-				}
-				return
-			case <-time.After(time.Second):
-				t.Fatal("StreamMessages() did not stop")
-			}
-		default:
-		}
-	}
-	t.Fatal("StreamMessages() timed out")
 }
 
 func TestChannelGatewayMediaMessage(t *testing.T) {

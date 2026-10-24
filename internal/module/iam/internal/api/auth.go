@@ -5,11 +5,8 @@ import (
 
 	iamdto "cs-im-server/internal/module/iam/dto"
 	"cs-im-server/internal/module/iam/internal/service"
-	iamhttp "cs-im-server/internal/module/iam/pkg/http"
-	pkg "cs-im-server/internal/module/iam/pkg/iam"
+	iamprincipal "cs-im-server/internal/module/iam/pkg/principal"
 	"cs-im-server/pkg/httpapi"
-
-	commonmodule "vane-common/module"
 )
 
 type AuthAPI struct {
@@ -26,17 +23,6 @@ type RegisterRequest struct {
 	Email       string `json:"email"`
 	Password    string `json:"password"`
 	TenantName  string `json:"tenantName"`
-}
-
-func (a *AuthAPI) Routes() []commonmodule.HttpHandlerRegInfo {
-	auth := commonmodule.NewHttpRouteGroup("/api/v1/auth")
-	return []commonmodule.HttpHandlerRegInfo{
-		auth.Post("/login", a.Login),
-		auth.Post("/register", a.Register),
-		auth.Post("/password", a.ChangePassword, commonmodule.WithMiddlewares(iamhttp.AccountTokenMiddleware(a.Accounts), iamhttp.RequirePrincipalKind(pkg.PrincipalKindHuman))),
-		auth.Post("/logout", a.Logout, commonmodule.WithMiddlewares(iamhttp.AccountTokenMiddleware(a.Accounts), iamhttp.RequirePrincipalKind(pkg.PrincipalKindHuman))),
-		auth.Get("/me", a.Me, commonmodule.WithMiddlewares(iamhttp.AccountTokenMiddleware(a.Accounts), iamhttp.RequirePrincipalKind(pkg.PrincipalKindHuman))),
-	}
 }
 
 func (a *AuthAPI) Register(ctx httpapi.Context) {
@@ -75,7 +61,7 @@ func (a *AuthAPI) Login(ctx httpapi.Context) {
 }
 
 func (a *AuthAPI) Logout(ctx httpapi.Context) {
-	principal, _ := pkg.PrincipalFromContext(ctx.Context())
+	principal, _ := iamprincipal.FromContext(ctx.Context())
 	if err := a.Staff.Logout(ctx.Context(), principal); err != nil {
 		writeServiceError(ctx, err)
 		return
@@ -84,7 +70,7 @@ func (a *AuthAPI) Logout(ctx httpapi.Context) {
 }
 
 func (a *AuthAPI) ChangePassword(ctx httpapi.Context) {
-	principal, _ := pkg.PrincipalFromContext(ctx.Context())
+	principal, _ := iamprincipal.FromContext(ctx.Context())
 	var req iamdto.ChangeOwnPasswordRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
@@ -98,7 +84,7 @@ func (a *AuthAPI) ChangePassword(ctx httpapi.Context) {
 }
 
 func (a *AuthAPI) Me(ctx httpapi.Context) {
-	principal, _ := pkg.PrincipalFromContext(ctx.Context())
+	principal, _ := iamprincipal.FromContext(ctx.Context())
 	httpapi.WriteJSON(ctx, http.StatusOK, "OK", map[string]any{
 		"userKey":  principal.AccountKey,
 		"tenantId": principal.TenantID,

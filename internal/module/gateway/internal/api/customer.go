@@ -7,17 +7,20 @@ import (
 	"cs-im-server/internal/module/gateway/internal/service"
 	"cs-im-server/pkg/httpapi"
 	commonmodule "vane-common/module"
+	logger "vane-common/pkg/logger"
 )
 
 type CustomerAPI struct {
-	Service *service.CustomerService
+	Service       *service.CustomerService
+	Conversations *service.ConversationService
 }
 
-func NewCustomerAPI(customerService *service.CustomerService) *CustomerAPI {
-	return &CustomerAPI{Service: customerService}
+func NewCustomerAPI(customerService *service.CustomerService, conversations *service.ConversationService) *CustomerAPI {
+	return &CustomerAPI{Service: customerService, Conversations: conversations}
 }
 
 func (a *CustomerAPI) Create(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: create customer", ctx.Request().Method, ctx.Request().URL.Path)
 	var req gatewaydto.CreateCustomerRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
@@ -32,6 +35,7 @@ func (a *CustomerAPI) Create(ctx httpapi.Context) {
 }
 
 func (a *CustomerAPI) Get(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: get customer id=%s", ctx.Request().Method, ctx.Request().URL.Path, ctx.Param("id"))
 	customer, err := a.Service.Get(ctx.Context(), ctx.Param("id"))
 	if err != nil {
 		writeServiceError(ctx, err)
@@ -41,6 +45,7 @@ func (a *CustomerAPI) Get(ctx httpapi.Context) {
 }
 
 func (a *CustomerAPI) AddIdentity(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: add customer identity id=%s", ctx.Request().Method, ctx.Request().URL.Path, ctx.Param("id"))
 	var req gatewaydto.AddIdentityRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
@@ -55,6 +60,7 @@ func (a *CustomerAPI) AddIdentity(ctx httpapi.Context) {
 }
 
 func (a *CustomerAPI) Merge(ctx httpapi.Context) {
+	logger.Debugf(ctx.Context(), "gateway api %s %s: merge customer id=%s", ctx.Request().Method, ctx.Request().URL.Path, ctx.Param("id"))
 	var req gatewaydto.MergeCustomerRequest
 	if err := ctx.BindJSON(&req); err != nil {
 		httpapi.WriteError(ctx, http.StatusBadRequest, "BAD_REQUEST", err.Error())
@@ -62,6 +68,10 @@ func (a *CustomerAPI) Merge(ctx httpapi.Context) {
 	}
 	customer, err := a.Service.Merge(ctx.Context(), ctx.Param("id"), req)
 	if err != nil {
+		writeServiceError(ctx, err)
+		return
+	}
+	if err := a.Conversations.RetargetCustomer(req.SourceCustomerID, ctx.Param("id")); err != nil {
 		writeServiceError(ctx, err)
 		return
 	}
